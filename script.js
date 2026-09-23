@@ -516,40 +516,139 @@ function formatSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
+/** 核心文件镜像（国内优先 npmmirror） */
+const CORE_MIRRORS = [
+  "https://registry.npmmirror.com/@ffmpeg/core/0.12.6/files/dist/esm",
+  "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm",
+  "https://fastly.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm",
+  "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm",
+];
+
+/** 带进度与超时的下载 → Blob URL（wasm 约 25MB） */
+async function fetchToBlobURL(url, mimeType, onProgress, timeoutMs = 120000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal, mode: "cors" });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const total = Number(res.headers.get("content-length")) || 0;
+    if (!res.body || !res.body.getReader) {
+      const blob = await res.blob();
+      return URL.createObjectURL(new Blob([blob], { type: mimeType }));
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let loaded = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      loaded += value.byteLength;
+      if (onProgress) {
+        onProgress(total > 0 ? loaded / total : Math.min(0.95, loaded / (25 * 1024 * 1024)));
+      }
+    }
+    return URL.createObjectURL(new Blob(chunks, { type: mimeType }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function loadCoreFromMirrors() {
+  let lastErr = null;
+  for (let i = 0; i < CORE_MIRRORS.length; i++) {
+    const base = CORE_MIRRORS[i];
+    const label = i + 1 + "/" + CORE_MIRRORS.length;
+    try {
+      progressText.textContent = "下载引擎脚本（源 " + label + "）…";
+      progressFill.style.width = "6%";
+      const coreURL = await fetchToBlobURL(
+        base + "/ffmpeg-core.js",
+        "text/javascript",
+        (p) => {
+          progressFill.style.width = 6 + Math.round(p * 8) + "%";
+        },
+        60000
+      );
+
+      progressText.textContent = "下载引擎核心（约25MB，源 " + label + "）…";
+      const wasmURL = await fetchToBlobURL(
+        base + "/ffmpeg-core.wasm",
+        "application/wasm",
+        (p) => {
+          const pct = 14 + Math.round(p * 50);
+          progressFill.style.width = pct + "%";
+          progressText.textContent =
+            "下载引擎核心 " + Math.round(p * 100) + "%（源 " + label + "）…";
+        },
+        180000
+      );
+
+      return { coreURL, wasmURL };
+    } catch (e) {
+      console.warn("镜像失败:", base, e);
+      lastErr = e;
+      progressText.textContent = "源 " + label + " 失败，切换下一个…";
+    }
+  }
+  throw lastErr || new Error("所有镜像均无法下载转换引擎，请检查网络");
+}
+
 async function loadFFmpeg() {
   if (ffmpegLoaded && ffmpeg) return;
 
-  progressText.textContent = "正在加载转换引擎（首次约需几秒）…";
-  progressFill.style.width = "8%";
+  progressText.textContent = "正在初始化转换引擎…";
+  progressFill.style.width = "3%";
+
+  const workerURL = new URL("ffmpeg/worker.js", window.location.href).href;
+
+  try {
+    const wg = await fetch(workerURL);
+    if (!wg.ok) {
+      throw new Error("无法加载 /ffmpeg/worker.js，请确认已上传 ffmpeg 文件夹后重新部署");
+    }
+  } catch (e) {
+    if (String(e.message || e).includes("ffmpeg")) throw e;
+    console.warn("worker 探测:", e);
+  }
+
+  const { coreURL, wasmURL } = await loadCoreFromMirrors();
+
+  progressText.textContent = "正在启动引擎…";
+  progressFill.style.width = "68%";
 
   ffmpeg = new FFmpeg();
   ffmpeg.on("log", ({ message }) => {
-    // 便于排查：可在控制台查看
     if (message && /error|invalid|fail/i.test(message)) {
       console.warn("[ffmpeg]", message);
     }
   });
-  ffmpeg.on("progress", ({ progress, time }) => {
-    // progress 可能为 NaN，用 time 兜底
-    let pct = 20;
+  ffmpeg.on("progress", ({ progress }) => {
+    let pct = 75;
     if (Number.isFinite(progress) && progress > 0) {
-      pct = Math.min(92, Math.round(20 + progress * 72));
+      pct = Math.min(92, Math.round(75 + progress * 17));
     }
     progressFill.style.width = pct + "%";
     progressText.textContent = "转换中… " + pct + "%";
   });
 
-  const workerURL = new URL("ffmpeg/worker.js", window.location.href).href;
-  const coreBase = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
-
-  await ffmpeg.load({
-    coreURL: await toBlobURL(coreBase + "/ffmpeg-core.js", "text/javascript"),
-    wasmURL: await toBlobURL(coreBase + "/ffmpeg-core.wasm", "application/wasm"),
+  const loadPromise = ffmpeg.load({
+    coreURL,
+    wasmURL,
     classWorkerURL: workerURL,
   });
 
+  const timeoutPromise = new Promise((_, reject) => {
+    setTimeout(
+      () => reject(new Error("引擎启动超时，请刷新页面后重试，或换 WiFi/关闭 VPN")),
+      90000
+    );
+  });
+
+  await Promise.race([loadPromise, timeoutPromise]);
+
   ffmpegLoaded = true;
-  progressFill.style.width = "15%";
+  progressFill.style.width = "72%";
   progressText.textContent = "引擎已就绪，写入文件…";
 }
 
@@ -679,17 +778,26 @@ convertBtn.addEventListener("click", async () => {
   } catch (err) {
     console.error(err);
     await cleanupFs([inputName, outputName]);
+    // 加载失败时允许下次重新初始化
+    if (!ffmpegLoaded) {
+      try { if (ffmpeg) ffmpeg.terminate(); } catch (_) {}
+      ffmpeg = null;
+    }
     const msg = String(err && err.message ? err.message : err);
     let tip = "转换失败。";
-    if (/memory|out of memory|OOM|allocation/i.test(msg)) {
-      tip = "内存不足，请换更小的文件或压缩后再试。";
+    if (/memory|out of memory|OOM|allocation|abort/i.test(msg)) {
+      tip = "下载中断或内存不足，请换 WiFi 后重试，或用更小的文件。";
+    } else if (/超时|timeout/i.test(msg)) {
+      tip = "引擎启动超时，请刷新页面后重试，建议关闭 VPN 或换网络。";
     } else if (/no.*audio|does not contain|Invalid data|Stream map/i.test(msg)) {
       tip = "无法找到音轨，请确认视频里包含声音。";
-    } else if (/Worker|classWorkerURL|Failed to construct/i.test(msg)) {
+    } else if (/Worker|classWorkerURL|Failed to construct|worker\.js/i.test(msg)) {
       tip = "转换引擎加载失败，请确认已上传 ffmpeg 文件夹后重新部署。";
+    } else if (/所有镜像|HTTP|Failed to fetch|NetworkError/i.test(msg)) {
+      tip = "引擎文件下载失败，请检查网络后重试（首次需下载约 25MB）。";
     }
     progressText.textContent = tip;
-    alert(tip + "\n\n详情：" + msg.slice(0, 200));
+    alert(tip + "\n\n详情：" + msg.slice(0, 220));
   } finally {
     convertBtn.disabled = false;
   }
