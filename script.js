@@ -6,7 +6,6 @@ const STORAGE_KEY = "nav_profile_v1";
 
 /* ========== 个人资料 DOM ========== */
 const avatarImg = document.getElementById("avatarImg");
-const avatarPlaceholder = document.getElementById("avatarPlaceholder");
 const displayName = document.getElementById("displayName");
 const displayBio = document.getElementById("displayBio");
 const customBg = document.getElementById("customBg");
@@ -24,7 +23,16 @@ const avatarFileInput = document.getElementById("avatarFileInput");
 const bgUrlInput = document.getElementById("bgUrlInput");
 const bgFileInput = document.getElementById("bgFileInput");
 const clearBgBtn = document.getElementById("clearBgBtn");
+const fxSelect = document.getElementById("fxSelect");
 const saveBtn = document.getElementById("saveBtn");
+const fxBar = document.getElementById("fxBar");
+
+/* 默认透明占位头像（灰色圆环感） */
+const DEFAULT_AVATAR =
+  "data:image/svg+xml," +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><circle cx="48" cy="48" r="48" fill="%23ffffff10"/><circle cx="48" cy="40" r="16" fill="%23ffffff28"/><ellipse cx="48" cy="78" rx="26" ry="18" fill="%23ffffff22"/></svg>'
+  );
 
 /* ========== 读取 / 应用资料 ========== */
 function loadProfile() {
@@ -44,18 +52,14 @@ function applyProfile(data) {
   displayBio.textContent = bio;
   nameInput.value = data.name || "";
   bioInput.value = data.bio || "";
-  avatarUrlInput.value = data.avatarUrl || "";
-  bgUrlInput.value = data.bgUrl || "";
+  avatarUrlInput.value = data.avatarUrl && !data.avatarUrl.startsWith("data:") ? data.avatarUrl : "";
+  bgUrlInput.value = data.bgUrl && !String(data.bgUrl).startsWith("data:") ? data.bgUrl : "";
+  fxSelect.value = data.fx || "none";
 
-  if (data.avatarUrl) {
-    avatarImg.src = data.avatarUrl;
-    avatarImg.hidden = false;
-    avatarPlaceholder.hidden = true;
-  } else {
-    avatarImg.hidden = true;
-    avatarPlaceholder.hidden = false;
-    avatarImg.removeAttribute("src");
-  }
+  avatarImg.src = data.avatarUrl || DEFAULT_AVATAR;
+  avatarImg.onerror = () => {
+    avatarImg.src = DEFAULT_AVATAR;
+  };
 
   if (data.bgUrl) {
     customBg.style.backgroundImage = `url("${data.bgUrl}")`;
@@ -64,6 +68,8 @@ function applyProfile(data) {
     customBg.style.backgroundImage = "";
     customBg.classList.remove("show");
   }
+
+  setFxMode(data.fx || "none", false);
 }
 
 function saveProfile(data) {
@@ -71,7 +77,14 @@ function saveProfile(data) {
   applyProfile(data);
 }
 
-/* 文件转 base64（用于本地上传头像/背景，存 localStorage） */
+function getStored() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
 function fileToDataURL(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -97,11 +110,7 @@ closeModal.addEventListener("click", closeSettings);
 modalMask.addEventListener("click", closeSettings);
 
 pwdInput.addEventListener("input", () => {
-  if (pwdInput.value === PASSWORD) {
-    settingsForm.hidden = false;
-  } else {
-    settingsForm.hidden = true;
-  }
+  settingsForm.hidden = pwdInput.value !== PASSWORD;
 });
 
 saveBtn.addEventListener("click", async () => {
@@ -112,6 +121,7 @@ saveBtn.addEventListener("click", async () => {
 
   let avatarUrl = avatarUrlInput.value.trim();
   let bgUrl = bgUrlInput.value.trim();
+  const prev = getStored();
 
   if (avatarFileInput.files[0]) {
     try {
@@ -120,6 +130,8 @@ saveBtn.addEventListener("click", async () => {
       alert("头像读取失败");
       return;
     }
+  } else if (!avatarUrl && prev.avatarUrl) {
+    avatarUrl = prev.avatarUrl;
   }
 
   if (bgFileInput.files[0]) {
@@ -129,6 +141,8 @@ saveBtn.addEventListener("click", async () => {
       alert("背景图读取失败");
       return;
     }
+  } else if (!bgUrl && prev.bgUrl && bgUrlInput.value !== "") {
+    bgUrl = prev.bgUrl;
   }
 
   try {
@@ -137,6 +151,7 @@ saveBtn.addEventListener("click", async () => {
       bio: bioInput.value.trim(),
       avatarUrl,
       bgUrl,
+      fx: fxSelect.value,
     });
     avatarFileInput.value = "";
     bgFileInput.value = "";
@@ -151,6 +166,184 @@ saveBtn.addEventListener("click", async () => {
 clearBgBtn.addEventListener("click", () => {
   bgUrlInput.value = "";
   bgFileInput.value = "";
+});
+
+/* ========== 特效系统（花瓣 / 雪花 / 雨） ========== */
+const canvas = document.getElementById("fxCanvas");
+const ctx = canvas.getContext("2d");
+let fxMode = "none";
+let particles = [];
+let animId = null;
+let w = 0;
+let h = 0;
+
+function resizeCanvas() {
+  w = canvas.width = window.innerWidth;
+  h = canvas.height = window.innerHeight;
+}
+
+window.addEventListener("resize", () => {
+  resizeCanvas();
+  if (fxMode !== "none") spawnParticles(true);
+});
+
+function spawnParticles(reset) {
+  if (reset) particles = [];
+  const count =
+    fxMode === "rain" ? Math.min(160, Math.floor(w / 6)) :
+    fxMode === "snow" ? Math.min(90, Math.floor(w / 10)) :
+    Math.min(50, Math.floor(w / 18));
+
+  while (particles.length < count) {
+    particles.push(createParticle());
+  }
+  particles.length = count;
+}
+
+function createParticle() {
+  if (fxMode === "rain") {
+    return {
+      x: Math.random() * w,
+      y: Math.random() * h - h,
+      len: 12 + Math.random() * 18,
+      speed: 8 + Math.random() * 10,
+      opacity: 0.15 + Math.random() * 0.35,
+      drift: -0.5 + Math.random() * 0.3,
+    };
+  }
+  if (fxMode === "snow") {
+    return {
+      x: Math.random() * w,
+      y: Math.random() * h - h,
+      r: 1.2 + Math.random() * 3.2,
+      speed: 0.6 + Math.random() * 1.8,
+      opacity: 0.35 + Math.random() * 0.55,
+      swing: Math.random() * Math.PI * 2,
+      swingSpeed: 0.01 + Math.random() * 0.02,
+    };
+  }
+  // petal
+  return {
+    x: Math.random() * w,
+    y: Math.random() * h - h,
+    size: 6 + Math.random() * 10,
+    speed: 0.8 + Math.random() * 1.6,
+    opacity: 0.45 + Math.random() * 0.45,
+    rot: Math.random() * Math.PI * 2,
+    rotSpeed: (Math.random() - 0.5) * 0.04,
+    swing: Math.random() * Math.PI * 2,
+    swingSpeed: 0.008 + Math.random() * 0.015,
+    color: Math.random() > 0.5 ? "255,182,193" : "255,160,180",
+  };
+}
+
+function drawPetal(p) {
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  ctx.rotate(p.rot);
+  ctx.globalAlpha = p.opacity;
+  ctx.fillStyle = `rgba(${p.color},1)`;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, p.size * 0.45, p.size, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawSnow(p) {
+  ctx.beginPath();
+  ctx.globalAlpha = p.opacity;
+  ctx.fillStyle = "#fff";
+  ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawRain(p) {
+  ctx.globalAlpha = p.opacity;
+  ctx.strokeStyle = "rgba(180, 210, 255, 0.9)";
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y);
+  ctx.lineTo(p.x + p.drift * 2, p.y + p.len);
+  ctx.stroke();
+}
+
+function tick() {
+  if (fxMode === "none") {
+    ctx.clearRect(0, 0, w, h);
+    animId = null;
+    return;
+  }
+
+  ctx.clearRect(0, 0, w, h);
+
+  for (const p of particles) {
+    if (fxMode === "rain") {
+      p.y += p.speed;
+      p.x += p.drift;
+      if (p.y > h + 20) {
+        p.y = -20;
+        p.x = Math.random() * w;
+      }
+      drawRain(p);
+    } else if (fxMode === "snow") {
+      p.swing += p.swingSpeed;
+      p.y += p.speed;
+      p.x += Math.sin(p.swing) * 0.6;
+      if (p.y > h + 10) {
+        p.y = -10;
+        p.x = Math.random() * w;
+      }
+      drawSnow(p);
+    } else {
+      p.swing += p.swingSpeed;
+      p.rot += p.rotSpeed;
+      p.y += p.speed;
+      p.x += Math.sin(p.swing) * 0.9;
+      if (p.y > h + 20) {
+        p.y = -20;
+        p.x = Math.random() * w;
+      }
+      drawPetal(p);
+    }
+  }
+
+  ctx.globalAlpha = 1;
+  animId = requestAnimationFrame(tick);
+}
+
+function setFxMode(mode, persist) {
+  fxMode = mode || "none";
+
+  // 更新底部按钮状态
+  fxBar.querySelectorAll(".fx-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.fx === fxMode);
+  });
+  fxSelect.value = fxMode;
+
+  if (animId) {
+    cancelAnimationFrame(animId);
+    animId = null;
+  }
+  ctx.clearRect(0, 0, w, h);
+  particles = [];
+
+  if (fxMode !== "none") {
+    resizeCanvas();
+    spawnParticles(true);
+    animId = requestAnimationFrame(tick);
+  }
+
+  if (persist) {
+    const data = getStored();
+    data.fx = fxMode;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  }
+}
+
+fxBar.addEventListener("click", (e) => {
+  const btn = e.target.closest(".fx-btn");
+  if (!btn) return;
+  setFxMode(btn.dataset.fx, true);
 });
 
 /* ========== MP4 → MP3 ========== */
@@ -342,4 +535,5 @@ function getExt(name) {
 }
 
 /* 启动 */
+resizeCanvas();
 loadProfile();
