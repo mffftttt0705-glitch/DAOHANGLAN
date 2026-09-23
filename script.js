@@ -29,7 +29,6 @@ fileInput.addEventListener("change", () => {
   if (fileInput.files.length) handleFile(fileInput.files[0]);
 });
 
-/* 拖拽 */
 uploadArea.addEventListener("dragover", (e) => {
   e.preventDefault();
   uploadArea.classList.add("dragover");
@@ -82,7 +81,11 @@ function formatSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-/* ========== 加载 ffmpeg ========== */
+/* ========== 加载 ffmpeg ==========
+ * Worker 必须从本站同域名加载，否则会报：
+ * Failed to construct 'Worker': Script at '...cdn.../worker.js' cannot be accessed from origin '...'
+ * core / wasm 体积大，用 CDN + toBlobURL 即可（blob 不触发跨域 Worker 限制）
+ */
 async function loadFFmpeg() {
   if (ffmpegLoaded) return;
 
@@ -98,10 +101,16 @@ async function loadFFmpeg() {
     progressText.textContent = "转换中… " + pct + "%";
   });
 
-  const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
+  // 本站 worker（解决跨域）
+  const workerURL = new URL("ffmpeg/worker.js", window.location.href).href;
+
+  // core / wasm 仍走 CDN，转成 blob 避免 CORS
+  const coreBase = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
+
   await ffmpeg.load({
-    coreURL: await toBlobURL(baseURL + "/ffmpeg-core.js", "text/javascript"),
-    wasmURL: await toBlobURL(baseURL + "/ffmpeg-core.wasm", "application/wasm"),
+    coreURL: await toBlobURL(coreBase + "/ffmpeg-core.js", "text/javascript"),
+    wasmURL: await toBlobURL(coreBase + "/ffmpeg-core.wasm", "application/wasm"),
+    classWorkerURL: workerURL,
   });
 
   ffmpegLoaded = true;
