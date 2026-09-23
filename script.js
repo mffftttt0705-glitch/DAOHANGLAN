@@ -1,73 +1,177 @@
-// ========== 汉堡菜单 ==========
-const menuToggle = document.getElementById("menuToggle");
-const navLinks = document.getElementById("navLinks");
+import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
+import { toBlobURL } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js";
 
-menuToggle.addEventListener("click", () => {
-  menuToggle.classList.toggle("active");
-  navLinks.classList.toggle("open");
+/* ========== DOM ========== */
+const uploadArea = document.getElementById("uploadArea");
+const fileInput = document.getElementById("fileInput");
+const uploadContent = document.getElementById("uploadContent");
+const fileInfo = document.getElementById("fileInfo");
+const fileName = document.getElementById("fileName");
+const clearBtn = document.getElementById("clearBtn");
+const convertBtn = document.getElementById("convertBtn");
+const progressWrap = document.getElementById("progressWrap");
+const progressFill = document.getElementById("progressFill");
+const progressText = document.getElementById("progressText");
+const result = document.getElementById("result");
+const downloadLink = document.getElementById("downloadLink");
+
+let selectedFile = null;
+let ffmpeg = null;
+let ffmpegLoaded = false;
+
+/* ========== 文件选择 ========== */
+uploadArea.addEventListener("click", (e) => {
+  if (e.target === clearBtn || clearBtn.contains(e.target)) return;
+  fileInput.click();
 });
 
-// 点击菜单项后自动关闭（手机端）
-navLinks.querySelectorAll(".nav-item").forEach((link) => {
-  link.addEventListener("click", () => {
-    menuToggle.classList.remove("active");
-    navLinks.classList.remove("open");
-  });
+fileInput.addEventListener("change", () => {
+  if (fileInput.files.length) handleFile(fileInput.files[0]);
 });
 
-// ========== 背景音乐 ==========
-const musicBtn = document.getElementById("musicBtn");
-const musicIcon = document.getElementById("musicIcon");
-const bgMusic = document.getElementById("bgMusic");
+/* 拖拽 */
+uploadArea.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  uploadArea.classList.add("dragover");
+});
 
-let isPlaying = false;
+uploadArea.addEventListener("dragleave", () => {
+  uploadArea.classList.remove("dragover");
+});
 
-// 浏览器通常禁止自动播放有声音的媒体，需要用户点击后才能播放
-musicBtn.addEventListener("click", async () => {
-  try {
-    if (isPlaying) {
-      bgMusic.pause();
-      musicIcon.textContent = "▶";
-      isPlaying = false;
-    } else {
-      await bgMusic.play();
-      musicIcon.textContent = "❚❚";
-      isPlaying = true;
-    }
-  } catch (err) {
-    console.warn("音乐播放失败，请检查音频源是否可访问：", err);
-    alert("音乐加载失败，请检查音频链接是否有效。");
+uploadArea.addEventListener("drop", (e) => {
+  e.preventDefault();
+  uploadArea.classList.remove("dragover");
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+function handleFile(file) {
+  const ok =
+    file.type.startsWith("video/") ||
+    /\.(mp4|webm|mov|mkv|avi)$/i.test(file.name);
+  if (!ok) {
+    alert("请选择视频文件（MP4 / WebM 等）");
+    return;
+  }
+  selectedFile = file;
+  fileName.textContent = file.name + "（" + formatSize(file.size) + "）";
+  uploadContent.hidden = true;
+  fileInfo.hidden = false;
+  convertBtn.disabled = false;
+  result.hidden = true;
+  progressWrap.hidden = true;
+}
+
+clearBtn.addEventListener("click", (e) => {
+  e.stopPropagation();
+  selectedFile = null;
+  fileInput.value = "";
+  uploadContent.hidden = false;
+  fileInfo.hidden = true;
+  convertBtn.disabled = true;
+  result.hidden = true;
+  progressWrap.hidden = true;
+  if (downloadLink.href && downloadLink.href.startsWith("blob:")) {
+    URL.revokeObjectURL(downloadLink.href);
   }
 });
 
-// 音乐结束后重置图标（虽然设置了 loop，保险起见）
-bgMusic.addEventListener("ended", () => {
-  musicIcon.textContent = "▶";
-  isPlaying = false;
-});
-
-// ========== 导航高亮（滚动时） ==========
-const sections = document.querySelectorAll("section[id]");
-const navItems = document.querySelectorAll(".nav-item");
-
-function updateActiveNav() {
-  const scrollY = window.scrollY + 100;
-
-  sections.forEach((section) => {
-    const top = section.offsetTop;
-    const height = section.offsetHeight;
-    const id = section.getAttribute("id");
-
-    if (scrollY >= top && scrollY < top + height) {
-      navItems.forEach((item) => {
-        item.classList.remove("active");
-        if (item.getAttribute("href") === `#${id}`) {
-          item.classList.add("active");
-        }
-      });
-    }
-  });
+function formatSize(bytes) {
+  if (bytes < 1024) return bytes + " B";
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+  return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-window.addEventListener("scroll", updateActiveNav);
-updateActiveNav();
+/* ========== 加载 ffmpeg ========== */
+async function loadFFmpeg() {
+  if (ffmpegLoaded) return;
+
+  progressWrap.hidden = false;
+  progressText.textContent = "正在加载转换引擎（首次约需几秒）…";
+  progressFill.style.width = "8%";
+
+  ffmpeg = new FFmpeg();
+
+  ffmpeg.on("progress", ({ progress }) => {
+    const pct = Math.min(95, Math.round(progress * 100));
+    progressFill.style.width = pct + "%";
+    progressText.textContent = "转换中… " + pct + "%";
+  });
+
+  const baseURL = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
+  await ffmpeg.load({
+    coreURL: await toBlobURL(baseURL + "/ffmpeg-core.js", "text/javascript"),
+    wasmURL: await toBlobURL(baseURL + "/ffmpeg-core.wasm", "application/wasm"),
+  });
+
+  ffmpegLoaded = true;
+  progressFill.style.width = "15%";
+  progressText.textContent = "引擎加载完成，开始转换…";
+}
+
+/* ========== 转换 ========== */
+convertBtn.addEventListener("click", async () => {
+  if (!selectedFile) return;
+
+  convertBtn.disabled = true;
+  result.hidden = true;
+  progressWrap.hidden = false;
+  progressFill.style.width = "0%";
+  progressText.textContent = "准备中…";
+
+  try {
+    await loadFFmpeg();
+
+    const inputName = "input" + getExt(selectedFile.name);
+    const outputName = "output.mp3";
+
+    const data = new Uint8Array(await selectedFile.arrayBuffer());
+    await ffmpeg.writeFile(inputName, data);
+
+    progressText.textContent = "正在提取音频…";
+    progressFill.style.width = "20%";
+
+    await ffmpeg.exec([
+      "-i", inputName,
+      "-vn",
+      "-acodec", "libmp3lame",
+      "-q:a", "2",
+      outputName,
+    ]);
+
+    progressFill.style.width = "98%";
+    progressText.textContent = "生成文件中…";
+
+    const outputData = await ffmpeg.readFile(outputName);
+    const blob = new Blob([outputData.buffer], { type: "audio/mpeg" });
+    const url = URL.createObjectURL(blob);
+
+    try {
+      await ffmpeg.deleteFile(inputName);
+      await ffmpeg.deleteFile(outputName);
+    } catch (_) {}
+
+    const baseName = selectedFile.name.replace(/\.[^.]+$/, "") || "audio";
+    downloadLink.href = url;
+    downloadLink.download = baseName + ".mp3";
+    downloadLink.textContent = "下载 " + baseName + ".mp3";
+
+    progressFill.style.width = "100%";
+    progressText.textContent = "完成！";
+    result.hidden = false;
+  } catch (err) {
+    console.error(err);
+    progressText.textContent = "转换失败：" + (err.message || "未知错误");
+    alert(
+      "转换失败，请确认文件是否为有效视频，或尝试更小的文件。\n\n" +
+        (err.message || "")
+    );
+  } finally {
+    convertBtn.disabled = false;
+  }
+});
+
+function getExt(name) {
+  const m = name.match(/\.[^.]+$/);
+  return m ? m[0].toLowerCase() : ".mp4";
+}
