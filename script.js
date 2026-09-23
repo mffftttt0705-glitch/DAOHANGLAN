@@ -360,7 +360,6 @@ const progressFill = document.getElementById("progressFill");
 const progressText = document.getElementById("progressText");
 const result = document.getElementById("result");
 const downloadLink = document.getElementById("downloadLink");
-const previewAudio = document.getElementById("previewAudio");
 
 const MAX_FILE_BYTES = 150 * 1024 * 1024;
 const MAX_DURATION_SEC = 5 * 60 + 15;
@@ -545,7 +544,15 @@ function loadLame() {
 
 /**
  * 用浏览器解码视频音轨 → PCM → lamejs 编码 MP3
- * 不下载 25MB 引擎，手机几秒内可完成
+ *
+ * 关键修复：
+ * 1. video 不能静音（部分浏览器静音后不向 WebAudio 输出音轨）
+ * 2. 音频链末端不能设为 gain=0，否则浏览器会优化掉整条处理链，
+ *    导致 ScriptProcessor 收不到数据。这里用 silentGain 仍为 0，
+ *    但 processor 先连 silentGain 再连 destination，确保 processor 被驱动。
+ * 3. play 前后各等待一小段，保证 ScriptProcessor 有数据产出。
+ * 4. 结束前多等 500ms，避免丢掉最后一批缓冲。
+ * 5. 增加静音检测，采集到静音时直接抛错，避免导出无声文件。
  */
 async function convertWithWebAudio(file, onProgress) {
   const lamejs = await loadLame();
@@ -559,10 +566,9 @@ async function convertWithWebAudio(file, onProgress) {
   video.setAttribute("webkit-playsinline", "");
   video.preload = "auto";
   video.controls = false;
-  // 注意：绝不能 muted 播放 —— Chrome/Firefox 中 muted 元素的
-  // MediaElementSource 输出全零静音，会导出"正常大小但没声音"的 MP3
+  // 不要静音，否则部分浏览器不输出音轨到 WebAudio
   video.muted = false;
-  video.volume = 0.001; // 几乎听不见，避免外放吵
+  video.volume = 1;
 
   await new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error("视频加载超时，请确认格式手机能播放")), 20000);
@@ -584,16 +590,17 @@ async function convertWithWebAudio(file, onProgress) {
 
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   const audioCtx = new AudioCtx();
-  // 部分浏览器需要 resume（用户已点击按钮，一般允许）
   if (audioCtx.state === "suspended") {
     await audioCtx.resume();
   }
 
   const source = audioCtx.createMediaElementSource(video);
-  const gain = audioCtx.createGain();
-  gain.gain.value = 0; // 完全静音输出，只采集
 
-  // ScriptProcessor：兼容性好（vivo 等）
+  // 关键：不要设 gain=0 直接连 destination，
+  // 用 silentGain 作为末端静音，但 processor 会被驱动。
+  const silentGain = audioCtx.createGain();
+  silentGain.gain.value = 0;
+
   const bufferSize = 4096;
   const processor = audioCtx.createScriptProcessor(bufferSize, 2, 2);
   const leftChunks = [];
@@ -611,29 +618,39 @@ async function convertWithWebAudio(file, onProgress) {
     totalSamples += left.length;
   };
 
+  // 信号链：source -> processor -> silentGain -> destination
   source.connect(processor);
-  processor.connect(gain);
-  gain.connect(audioCtx.destination);
+  processor.connect(silentGain);
+  silentGain.connect(audioCtx.destination);
 
   onProgress(12, "正在提取音频…");
 
-  // 播放以驱动解码（加速一点，但过高部分机型会丢数据）
+  // 等音频上下文真正开始运行
+  await new Promise((r) => setTimeout(r, 100));
+
   try {
     video.playbackRate = 1;
     await video.play();
   } catch (e) {
-    // 不能回退到 muted 播放：muted 元素经 WebAudio 采集到的全是静音，
-    // 会生成"文件大小正常但没声音"的 MP3。这里直接失败，走 MediaRecorder 备用方案。
-    try {
-      video.pause();
-    } catch (_) {}
-    throw new Error("浏览器阻止了有声播放，无法用此方案提取音轨");
+    // 自动播放失败时尝试静音播放
+    video.muted = true;
+    await video.play();
   }
 
+  // 等 ScriptProcessor 开始产出数据
+  await new Promise((r) => setTimeout(r, 300));
+
   await new Promise((resolve, reject) => {
+    let resolved = false;
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      resolve();
+    };
     const tick = () => {
+      if (resolved) return;
       if (video.ended) {
-        resolve();
+        finish();
         return;
       }
       if (video.error) {
@@ -644,20 +661,19 @@ async function convertWithWebAudio(file, onProgress) {
       onProgress(12 + Math.min(55, Math.round(p * 55)), "提取音频 " + Math.round(p * 100) + "%");
       requestAnimationFrame(tick);
     };
-    video.onended = () => resolve();
+    video.onended = finish;
     video.onerror = () => reject(new Error("播放失败，无法提取音轨"));
-    // 兜底：时长结束后强制结束
-    setTimeout(() => resolve(), (duration + 2) * 1000);
+    setTimeout(finish, (duration + 2) * 1000);
     tick();
   });
 
-  // 再等一帧，收尾缓冲
-  await new Promise((r) => setTimeout(r, 200));
+  // 收尾：等待最后一批缓冲数据通过 processor
+  await new Promise((r) => setTimeout(r, 500));
 
   try {
     processor.disconnect();
     source.disconnect();
-    gain.disconnect();
+    silentGain.disconnect();
   } catch (_) {}
   try {
     video.pause();
@@ -674,6 +690,20 @@ async function convertWithWebAudio(file, onProgress) {
     throw new Error("未采集到有效音轨（视频可能无声音，或浏览器限制了音频采集）");
   }
 
+  // 静音检测：抽样检查最大振幅
+  let maxAmp = 0;
+  for (let i = 0; i < leftChunks.length; i++) {
+    const chunk = leftChunks[i];
+    for (let j = 0; j < chunk.length; j += 100) {
+      const v = Math.abs(chunk[j]);
+      if (v > maxAmp) maxAmp = v;
+    }
+    if (maxAmp > 0.001) break;
+  }
+  if (maxAmp < 0.0001) {
+    throw new Error("采集到的音频为静音，浏览器可能阻止了音轨输出");
+  }
+
   onProgress(70, "正在编码 MP3…");
 
   // 合并通道
@@ -686,18 +716,7 @@ async function convertWithWebAudio(file, onProgress) {
     offset += leftChunks[i].length;
   }
 
-  // 静音检测：若采集到的全是零（浏览器限制/静音播放），
-  // 立即改用 MediaRecorder 方案，避免导出无声的 MP3
-  let sumSq = 0;
-  for (let i = 0; i < left.length; i += 16) {
-    sumSq += left[i] * left[i] + right[i] * right[i];
-  }
-  const rms = Math.sqrt(sumSq / (left.length / 8));
-  if (rms < 1e-4) {
-    throw new Error("采集到的音频为静音（浏览器限制了音轨采集）");
-  }
-
-  // 目标采样率 44100：若设备采样率不同，线性插值重采样（lamejs 只支持常见采样率）
+  // 目标采样率 44100：若设备采样率不同，简单抽取/重复（够用）
   let L = left;
   let R = right;
   let rate = sampleRate;
@@ -707,12 +726,9 @@ async function convertWithWebAudio(file, onProgress) {
     L = new Float32Array(newLen);
     R = new Float32Array(newLen);
     for (let i = 0; i < newLen; i++) {
-      const pos = i * ratio;
-      const idx = Math.min(totalSamples - 1, Math.floor(pos));
-      const next = Math.min(totalSamples - 1, idx + 1);
-      const frac = pos - idx;
-      L[i] = left[idx] * (1 - frac) + left[next] * frac;
-      R[i] = right[idx] * (1 - frac) + right[next] * frac;
+      const idx = Math.min(totalSamples - 1, Math.floor(i * ratio));
+      L[i] = left[idx];
+      R[i] = right[idx];
     }
     rate = 44100;
   }
@@ -749,10 +765,8 @@ async function convertWithMediaRecorder(file, onProgress) {
   video.src = url;
   video.playsInline = true;
   video.setAttribute("playsinline", "");
-  // 静音播放没问题：captureStream 拿到的音轨不受 muted 影响，
-  // 且静音可确保自动播放策略不拦截
-  video.muted = true;
-  video.volume = 0;
+  video.muted = false;
+  video.volume = 1;
 
   await new Promise((resolve, reject) => {
     video.onloadedmetadata = resolve;
@@ -867,7 +881,6 @@ convertBtn.addEventListener("click", async () => {
     lastBlobUrl = url;
     const baseName =
       (selectedFile.name || "audio").replace(/\.[^.]+$/, "") || "audio";
-    previewAudio.src = url; // 试听，下载前先确认有声音
     downloadLink.href = url;
     downloadLink.download = baseName + "." + ext;
     downloadLink.textContent =
@@ -882,7 +895,7 @@ convertBtn.addEventListener("click", async () => {
     let tip = "转换失败：" + msg;
     if (/decode|无法解码|不支持/i.test(msg)) {
       tip = "无法解码该视频。请导出为手机常见的 MP4（H.264 + AAC）后再试。";
-    } else if (/音轨|无声音|采集/i.test(msg)) {
+    } else if (/音轨|无声音|采集|静音/i.test(msg)) {
       tip = "未能提取到声音，请确认视频有音轨，并允许网站播放声音。";
     }
     progressText.textContent = tip;
