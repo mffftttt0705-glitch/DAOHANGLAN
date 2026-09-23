@@ -1,19 +1,45 @@
-/// <reference no-default-lib="true" />
-/// <reference lib="esnext" />
-/// <reference lib="webworker" />
-import { CORE_URL, FFMessageType } from "./const.js";
-import { ERROR_UNKNOWN_MESSAGE_TYPE, ERROR_NOT_LOADED, ERROR_IMPORT_FAILURE, } from "./errors.js";
+/* ffmpeg worker bundled (no ES modules) for mobile browsers */
+const MIME_TYPE_JAVASCRIPT = "text/javascript";
+const MIME_TYPE_WASM = "application/wasm";
+const CORE_VERSION = "0.12.6";
+const CORE_URL = `https://unpkg.com/@ffmpeg/core@${CORE_VERSION}/dist/umd/ffmpeg-core.js`;
+var FFMessageType;
+(function (FFMessageType) {
+    FFMessageType["LOAD"] = "LOAD";
+    FFMessageType["EXEC"] = "EXEC";
+    FFMessageType["WRITE_FILE"] = "WRITE_FILE";
+    FFMessageType["READ_FILE"] = "READ_FILE";
+    FFMessageType["DELETE_FILE"] = "DELETE_FILE";
+    FFMessageType["RENAME"] = "RENAME";
+    FFMessageType["CREATE_DIR"] = "CREATE_DIR";
+    FFMessageType["LIST_DIR"] = "LIST_DIR";
+    FFMessageType["DELETE_DIR"] = "DELETE_DIR";
+    FFMessageType["ERROR"] = "ERROR";
+    FFMessageType["DOWNLOAD"] = "DOWNLOAD";
+    FFMessageType["PROGRESS"] = "PROGRESS";
+    FFMessageType["LOG"] = "LOG";
+    FFMessageType["MOUNT"] = "MOUNT";
+    FFMessageType["UNMOUNT"] = "UNMOUNT";
+})(FFMessageType || (FFMessageType = {}));
+
+const ERROR_UNKNOWN_MESSAGE_TYPE = new Error("unknown message type");
+const ERROR_NOT_LOADED = new Error("ffmpeg is not loaded, call `await ffmpeg.load()` first");
+const ERROR_TERMINATED = new Error("called FFmpeg.terminate()");
+const ERROR_IMPORT_FAILURE = new Error("failed to import ffmpeg-core.js");
+
 let ffmpeg;
 const load = async ({ coreURL: _coreURL, wasmURL: _wasmURL, workerURL: _workerURL, }) => {
     const first = !ffmpeg;
     try {
         if (!_coreURL)
             _coreURL = CORE_URL;
+        // when web worker type is `classic`.
         importScripts(_coreURL);
     }
     catch {
         if (!_coreURL)
             _coreURL = CORE_URL.replace('/umd/', '/esm/');
+        // when web worker type is `module`.
         self.createFFmpegCore = (await import(
         /* webpackIgnore: true */ /* @vite-ignore */ _coreURL)).default;
         if (!self.createFFmpegCore) {
@@ -26,7 +52,9 @@ const load = async ({ coreURL: _coreURL, wasmURL: _wasmURL, workerURL: _workerUR
         ? _workerURL
         : _coreURL.replace(/.js$/g, ".worker.js");
     ffmpeg = await self.createFFmpegCore({
-        mainScriptUrlOrBlob: `\( {coreURL}# \){btoa(JSON.stringify({ wasmURL, workerURL }))}`,
+        // Fix `Overload resolution failed.` when using multi-threaded ffmpeg-core.
+        // Encoded wasmURL and workerURL in the URL as a hack to fix locateFile issue.
+        mainScriptUrlOrBlob: `${coreURL}#${btoa(JSON.stringify({ wasmURL, workerURL }))}`,
     });
     ffmpeg.setLogger((data) => self.postMessage({ type: FFMessageType.LOG, data }));
     ffmpeg.setProgress((data) => self.postMessage({
@@ -47,6 +75,7 @@ const writeFile = ({ path, data }) => {
     return true;
 };
 const readFile = ({ path, encoding }) => ffmpeg.FS.readFile(path, { encoding });
+// TODO: check if deletion works.
 const deleteFile = ({ path }) => {
     ffmpeg.FS.unlink(path);
     return true;
@@ -55,6 +84,7 @@ const rename = ({ oldPath, newPath }) => {
     ffmpeg.FS.rename(oldPath, newPath);
     return true;
 };
+// TODO: check if creation works.
 const createDir = ({ path }) => {
     ffmpeg.FS.mkdir(path);
     return true;
@@ -63,12 +93,13 @@ const listDir = ({ path }) => {
     const names = ffmpeg.FS.readdir(path);
     const nodes = [];
     for (const name of names) {
-        const stat = ffmpeg.FS.stat(`\( {path}/ \){name}`);
+        const stat = ffmpeg.FS.stat(`${path}/${name}`);
         const isDir = ffmpeg.FS.isDir(stat.mode);
         nodes.push({ name, isDir });
     }
     return nodes;
 };
+// TODO: check if deletion works.
 const deleteDir = ({ path }) => {
     ffmpeg.FS.rmdir(path);
     return true;
@@ -90,7 +121,7 @@ self.onmessage = async ({ data: { id, type, data: _data }, }) => {
     let data;
     try {
         if (type !== FFMessageType.LOAD && !ffmpeg)
-            throw ERROR_NOT_LOADED;
+            throw ERROR_NOT_LOADED; // eslint-disable-line
         switch (type) {
             case FFMessageType.LOAD:
                 data = await load(_data);
