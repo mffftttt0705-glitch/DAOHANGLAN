@@ -1,1 +1,104 @@
 
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>我的导航主页</title>
+  <link rel="stylesheet" href="style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- 背景层（可更换图片或颜色） -->
+  <div id="bg-layer"></div>
+
+  <!-- 顶部导航栏 -->
+  <header class="navbar">
+    <div class="nav-container">
+      <a href="#" class="logo">我的主页</a>
+
+      <!-- 桌面端菜单 -->
+      <nav class="nav-links" id="navLinks">
+        <a href="#home" class="nav-item active">首页</a>
+        <a href="#links" class="nav-item">常用链接</a>
+        <a href="#about" class="nav-item">关于</a>
+        <a href="https://example.com" target="_blank" class="nav-item">外部网站</a>
+      </nav>
+
+      <!-- 音乐控制 + 汉堡按钮 -->
+      <div class="nav-right">
+        <button id="musicBtn" class="icon-btn" title="播放/暂停音乐" aria-label="音乐">
+          <span id="musicIcon">▶</span>
+        </button>
+        <button id="menuToggle" class="icon-btn hamburger" aria-label="菜单">
+          <span></span>
+          <span></span>
+          <span></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主内容 -->
+  <main>
+    <!-- 首页区域 -->
+    <section id="home" class="hero">
+      <div class="hero-content">
+        <h1>欢迎来到我的导航</h1>
+        <p>一个简洁、可自定义的个人导航主页</p>
+
+        <!-- 主要按钮区（可随意增删） -->
+        <div class="button-grid">
+          <a href="https://www.google.com" target="_blank" class="btn">Google</a>
+          <a href="https://github.com" target="_blank" class="btn">GitHub</a>
+          <a href="https://www.bilibili.com" target="_blank" class="btn">Bilibili</a>
+          <a href="#about" class="btn btn-secondary">关于我</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- 常用链接区域 -->
+    <section id="links" class="section">
+      <h2>常用链接</h2>
+      <div class="card-grid">
+        <a href="https://chat.openai.com" target="_blank" class="card">
+          <h3>ChatGPT</h3>
+          <p>AI 对话助手</p>
+        </a>
+        <a href="https://claude.ai" target="_blank" class="card">
+          <h3>Claude</h3>
+          <p>Anthropic AI</p>
+        </a>
+        <a href="https://www.notion.so" target="_blank" class="card">
+          <h3>Notion</h3>
+          <p>笔记与知识库</p>
+        </a>
+        <a href="https://www.figma.com" target="_blank" class="card">
+          <h3>Figma</h3>
+          <p>设计工具</p>
+        </a>
+      </div>
+    </section>
+
+    <!-- 关于区域 -->
+    <section id="about" class="section">
+      <h2>关于</h2>
+      <p>这是一个部署在 Cloudflare Pages 的简单导航主页。<br>
+         你可以轻松更换背景、添加音乐和修改按钮链接。</p>
+    </section>
+  </main>
+
+  <!-- 背景音乐（把你的音乐文件放到 music 文件夹，或换成在线链接） -->
+  <audio id="bgMusic" loop preload="none">
+    <!-- 方式1：本地文件（部署时放在 music/ 目录下） -->
+    <!-- <source src="music/bgm.mp3" type="audio/mpeg"> -->
+
+    <!-- 方式2：在线音乐链接（示例，请替换成你自己的） -->
+    <source src="https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" type="audio/mpeg">
+  </audio>
+
+  <script src="script.js"></script>
+</body>
+</html>
