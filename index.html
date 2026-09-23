@@ -16,22 +16,46 @@
     <div class="blob blob-2"></div>
     <div class="blob blob-3"></div>
   </div>
-  <!-- 自定义背景图层 -->
   <div class="custom-bg" id="customBg"></div>
   <div class="bg-overlay"></div>
 
+  <!-- 特效画布：花瓣 / 雪花 / 雨 -->
+  <canvas id="fxCanvas" class="fx-canvas"></canvas>
+
   <div class="page">
-    <!-- 个人区：头像 + 文字 -->
+    <!-- 装饰顶线 -->
+    <div class="deco-top" aria-hidden="true">
+      <span class="deco-line"></span>
+      <span class="deco-dot"></span>
+      <span class="deco-line"></span>
+    </div>
+
+    <!-- 个人区：仅一个头像 -->
     <section class="profile">
-      <div class="avatar-wrap">
-        <img id="avatarImg" class="avatar" src="" alt="头像" hidden />
-        <div id="avatarPlaceholder" class="avatar placeholder">+</div>
+      <div class="avatar-frame">
+        <div class="avatar-ring"></div>
+        <img id="avatarImg" class="avatar" src="" alt="头像" />
       </div>
-      <h1 id="displayName" class="name">未设置昵称</h1>
+
+      <div class="name-block">
+        <div class="deco-side-lines" aria-hidden="true">
+          <span></span><span></span>
+        </div>
+        <h1 id="displayName" class="name">未设置昵称</h1>
+        <div class="deco-side-lines" aria-hidden="true">
+          <span></span><span></span>
+        </div>
+      </div>
+
       <p id="displayBio" class="bio">点击右下角设置进行个性化</p>
+
+      <div class="deco-underline" aria-hidden="true">
+        <span class="deco-line short"></span>
+        <span class="deco-diamond"></span>
+        <span class="deco-line short"></span>
+      </div>
     </section>
 
-    <!-- 功能入口：简约线条框 -->
     <section class="links">
       <a href="https://wangye-zhizuo-diy.pages.dev/" target="_blank" rel="noopener" class="link-box">
         <span class="link-title">网页DIY制作</span>
@@ -46,12 +70,24 @@
         <span class="link-desc">本地转换，不上传服务器</span>
       </button>
     </section>
+
+    <div class="deco-bottom" aria-hidden="true">
+      <span class="deco-line"></span>
+      <span class="deco-dot"></span>
+      <span class="deco-line"></span>
+    </div>
   </div>
 
-  <!-- 右下角设置 -->
+  <!-- 特效快捷切换（无需密码） -->
+  <div class="fx-bar" id="fxBar">
+    <button type="button" class="fx-btn active" data-fx="none" title="无特效">关</button>
+    <button type="button" class="fx-btn" data-fx="petal" title="花瓣">🌸</button>
+    <button type="button" class="fx-btn" data-fx="snow" title="雪花">❄</button>
+    <button type="button" class="fx-btn" data-fx="rain" title="下雨">🌧</button>
+  </div>
+
   <button type="button" class="fab" id="settingsBtn" title="设置">⚙</button>
 
-  <!-- 设置面板 -->
   <div class="modal" id="settingsModal" hidden>
     <div class="modal-mask" id="modalMask"></div>
     <div class="modal-panel glass">
@@ -83,6 +119,15 @@
           <input type="file" id="bgFileInput" accept="image/*" />
           <button type="button" class="btn-text" id="clearBgBtn">清除背景图</button>
         </div>
+        <div class="field">
+          <label>飘落特效</label>
+          <select id="fxSelect">
+            <option value="none">关闭</option>
+            <option value="petal">花瓣</option>
+            <option value="snow">雪花</option>
+            <option value="rain">下雨</option>
+          </select>
+        </div>
         <button type="button" class="btn primary" id="saveBtn">保存</button>
       </div>
 
@@ -90,7 +135,6 @@
     </div>
   </div>
 
-  <!-- 转换面板 -->
   <div class="modal" id="converterModal" hidden>
     <div class="modal-mask" id="converterMask"></div>
     <div class="modal-panel glass converter-panel">
