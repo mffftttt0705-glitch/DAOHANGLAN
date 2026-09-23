@@ -360,6 +360,7 @@ const progressFill = document.getElementById("progressFill");
 const progressText = document.getElementById("progressText");
 const result = document.getElementById("result");
 const downloadLink = document.getElementById("downloadLink");
+const previewAudio = document.getElementById("previewAudio");
 
 const MAX_FILE_BYTES = 150 * 1024 * 1024;
 const MAX_DURATION_SEC = 5 * 60 + 15;
@@ -558,7 +559,8 @@ async function convertWithWebAudio(file, onProgress) {
   video.setAttribute("webkit-playsinline", "");
   video.preload = "auto";
   video.controls = false;
-  // 不静音：部分手机对 muted 视频不输出音轨到 WebAudio
+  // 注意：绝不能 muted 播放 —— Chrome/Firefox 中 muted 元素的
+  // MediaElementSource 输出全零静音，会导出"正常大小但没声音"的 MP3
   video.muted = false;
   video.volume = 0.001; // 几乎听不见，避免外放吵
 
@@ -620,10 +622,12 @@ async function convertWithWebAudio(file, onProgress) {
     video.playbackRate = 1;
     await video.play();
   } catch (e) {
-    // 自动播放失败时尝试静音播放
-    video.muted = true;
-    video.volume = 0;
-    await video.play();
+    // 不能回退到 muted 播放：muted 元素经 WebAudio 采集到的全是静音，
+    // 会生成"文件大小正常但没声音"的 MP3。这里直接失败，走 MediaRecorder 备用方案。
+    try {
+      video.pause();
+    } catch (_) {}
+    throw new Error("浏览器阻止了有声播放，无法用此方案提取音轨");
   }
 
   await new Promise((resolve, reject) => {
@@ -682,7 +686,18 @@ async function convertWithWebAudio(file, onProgress) {
     offset += leftChunks[i].length;
   }
 
-  // 目标采样率 44100：若设备采样率不同，简单抽取/重复（够用）
+  // 静音检测：若采集到的全是零（浏览器限制/静音播放），
+  // 立即改用 MediaRecorder 方案，避免导出无声的 MP3
+  let sumSq = 0;
+  for (let i = 0; i < left.length; i += 16) {
+    sumSq += left[i] * left[i] + right[i] * right[i];
+  }
+  const rms = Math.sqrt(sumSq / (left.length / 8));
+  if (rms < 1e-4) {
+    throw new Error("采集到的音频为静音（浏览器限制了音轨采集）");
+  }
+
+  // 目标采样率 44100：若设备采样率不同，线性插值重采样（lamejs 只支持常见采样率）
   let L = left;
   let R = right;
   let rate = sampleRate;
@@ -692,9 +707,12 @@ async function convertWithWebAudio(file, onProgress) {
     L = new Float32Array(newLen);
     R = new Float32Array(newLen);
     for (let i = 0; i < newLen; i++) {
-      const idx = Math.min(totalSamples - 1, Math.floor(i * ratio));
-      L[i] = left[idx];
-      R[i] = right[idx];
+      const pos = i * ratio;
+      const idx = Math.min(totalSamples - 1, Math.floor(pos));
+      const next = Math.min(totalSamples - 1, idx + 1);
+      const frac = pos - idx;
+      L[i] = left[idx] * (1 - frac) + left[next] * frac;
+      R[i] = right[idx] * (1 - frac) + right[next] * frac;
     }
     rate = 44100;
   }
@@ -731,8 +749,10 @@ async function convertWithMediaRecorder(file, onProgress) {
   video.src = url;
   video.playsInline = true;
   video.setAttribute("playsinline", "");
-  video.muted = false;
-  video.volume = 0.001;
+  // 静音播放没问题：captureStream 拿到的音轨不受 muted 影响，
+  // 且静音可确保自动播放策略不拦截
+  video.muted = true;
+  video.volume = 0;
 
   await new Promise((resolve, reject) => {
     video.onloadedmetadata = resolve;
@@ -847,6 +867,7 @@ convertBtn.addEventListener("click", async () => {
     lastBlobUrl = url;
     const baseName =
       (selectedFile.name || "audio").replace(/\.[^.]+$/, "") || "audio";
+    previewAudio.src = url; // 试听，下载前先确认有声音
     downloadLink.href = url;
     downloadLink.download = baseName + "." + ext;
     downloadLink.textContent =
