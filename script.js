@@ -1,6 +1,3 @@
-import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
-import { toBlobURL } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js";
-
 const PASSWORD = "@55ff";
 const STORAGE_KEY = "nav_profile_v1";
 
@@ -346,7 +343,7 @@ fxBar.addEventListener("click", (e) => {
   setFxMode(btn.dataset.fx, true);
 });
 
-/* ========== 视频 → MP3 ========== */
+/* ========== 视频 → MP3（浏览器原生解码 + lamejs，不依赖 ffmpeg） ========== */
 const openConverter = document.getElementById("openConverter");
 const converterModal = document.getElementById("converterModal");
 const converterMask = document.getElementById("converterMask");
@@ -364,16 +361,14 @@ const progressText = document.getElementById("progressText");
 const result = document.getElementById("result");
 const downloadLink = document.getElementById("downloadLink");
 
-/** 约 5 分钟高码率视频的安全上限（浏览器内存限制） */
-const MAX_FILE_BYTES = 150 * 1024 * 1024; // 150 MB
-const MAX_DURATION_SEC = 5 * 60 + 15; // 5 分钟，略放宽 15 秒
+const MAX_FILE_BYTES = 150 * 1024 * 1024;
+const MAX_DURATION_SEC = 5 * 60 + 15;
 const VIDEO_EXT_RE =
   /\.(mp4|webm|mov|mkv|avi|flv|wmv|m4v|3gp|ts|mts|m2ts|mpeg|mpg|mpe|ogv|vob|asf|rm|rmvb|f4v|divx|xvid|mp3|m4a|aac|wav|ogg|flac|wma)$/i;
 
 let selectedFile = null;
-let ffmpeg = null;
-let ffmpegLoaded = false;
 let lastBlobUrl = null;
+let lameReady = null;
 
 openConverter.addEventListener("click", () => {
   converterModal.hidden = false;
@@ -418,16 +413,19 @@ function isMediaFile(file) {
   return VIDEO_EXT_RE.test(file.name || "");
 }
 
-/** 用浏览器探测时长（无法探测时返回 null，不拦截） */
 function probeDuration(file) {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const el = document.createElement("video");
     el.preload = "metadata";
+    el.playsInline = true;
+    el.muted = true;
     const done = (sec) => {
       URL.revokeObjectURL(url);
-      el.removeAttribute("src");
-      el.load();
+      try {
+        el.removeAttribute("src");
+        el.load();
+      } catch (_) {}
       resolve(sec);
     };
     el.onloadedmetadata = () => {
@@ -442,16 +440,11 @@ function probeDuration(file) {
 
 async function handleFile(file) {
   if (!isMediaFile(file)) {
-    alert("请选择视频或音频文件\n支持：MP4 / MOV / MKV / WebM / AVI / FLV / 3GP 等");
+    alert("请选择视频或音频文件\n支持：MP4 / MOV / MKV / WebM / AVI 等手机能播放的格式");
     return;
   }
-
   if (file.size > MAX_FILE_BYTES) {
-    alert(
-      "文件过大（" +
-        formatSize(file.size) +
-        "），建议不超过 150MB。\n过大会导致手机/浏览器内存不足而失败。"
-    );
+    alert("文件过大（" + formatSize(file.size) + "），建议不超过 150MB。");
     return;
   }
 
@@ -464,19 +457,13 @@ async function handleFile(file) {
   if (duration != null && duration > MAX_DURATION_SEC) {
     progressWrap.hidden = true;
     convertBtn.disabled = true;
-    alert(
-      "视频时长约 " +
-        Math.round(duration) +
-        " 秒，超过 5 分钟限制。\n请裁剪后再转换。"
-    );
+    alert("视频时长约 " + Math.round(duration) + " 秒，超过 5 分钟限制。");
     return;
   }
 
   selectedFile = file;
   let label = file.name + "（" + formatSize(file.size) + "）";
-  if (duration != null) {
-    label += " · " + formatDuration(duration);
-  }
+  if (duration != null) label += " · " + formatDuration(duration);
   fileName.textContent = label;
   uploadContent.hidden = true;
   fileInfo.hidden = false;
@@ -516,263 +503,312 @@ function formatSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-/** 核心文件镜像（国内优先 npmmirror） */
-const CORE_MIRRORS = [
-  "https://registry.npmmirror.com/@ffmpeg/core/0.12.6/files/dist/esm",
-  "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm",
-  "https://fastly.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm",
-  "https://unpkg.com/@ffmpeg/core@0.12.6/dist/esm",
-];
-
-/** 带进度与超时的下载 → Blob URL（wasm 约 25MB） */
-async function fetchToBlobURL(url, mimeType, onProgress, timeoutMs = 120000) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    const res = await fetch(url, { signal: ctrl.signal, mode: "cors" });
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const total = Number(res.headers.get("content-length")) || 0;
-    if (!res.body || !res.body.getReader) {
-      const blob = await res.blob();
-      return URL.createObjectURL(new Blob([blob], { type: mimeType }));
-    }
-    const reader = res.body.getReader();
-    const chunks = [];
-    let loaded = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      chunks.push(value);
-      loaded += value.byteLength;
-      if (onProgress) {
-        onProgress(total > 0 ? loaded / total : Math.min(0.95, loaded / (25 * 1024 * 1024)));
-      }
-    }
-    return URL.createObjectURL(new Blob(chunks, { type: mimeType }));
-  } finally {
-    clearTimeout(timer);
+function floatTo16BitPCM(float32Array) {
+  const out = new Int16Array(float32Array.length);
+  for (let i = 0; i < float32Array.length; i++) {
+    let s = Math.max(-1, Math.min(1, float32Array[i]));
+    out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
   }
+  return out;
 }
 
-async function loadCoreFromMirrors() {
-  let lastErr = null;
-  for (let i = 0; i < CORE_MIRRORS.length; i++) {
-    const base = CORE_MIRRORS[i];
-    const label = i + 1 + "/" + CORE_MIRRORS.length;
-    try {
-      progressText.textContent = "下载引擎脚本（源 " + label + "）…";
-      progressFill.style.width = "6%";
-      const coreURL = await fetchToBlobURL(
-        base + "/ffmpeg-core.js",
-        "text/javascript",
-        (p) => {
-          progressFill.style.width = 6 + Math.round(p * 8) + "%";
-        },
-        60000
-      );
-
-      progressText.textContent = "下载引擎核心（约25MB，源 " + label + "）…";
-      const wasmURL = await fetchToBlobURL(
-        base + "/ffmpeg-core.wasm",
-        "application/wasm",
-        (p) => {
-          const pct = 14 + Math.round(p * 50);
-          progressFill.style.width = pct + "%";
-          progressText.textContent =
-            "下载引擎核心 " + Math.round(p * 100) + "%（源 " + label + "）…";
-        },
-        180000
-      );
-
-      return { coreURL, wasmURL };
-    } catch (e) {
-      console.warn("镜像失败:", base, e);
-      lastErr = e;
-      progressText.textContent = "源 " + label + " 失败，切换下一个…";
+/** 加载 lamejs（MP3 编码器，体积小，手机友好） */
+function loadLame() {
+  if (lameReady) return lameReady;
+  lameReady = new Promise((resolve, reject) => {
+    if (window.lamejs) {
+      resolve(window.lamejs);
+      return;
     }
-  }
-  throw lastErr || new Error("所有镜像均无法下载转换引擎，请检查网络");
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js";
+    s.onload = () => {
+      if (window.lamejs) resolve(window.lamejs);
+      else reject(new Error("lamejs 加载失败"));
+    };
+    s.onerror = () => {
+      // 备用镜像
+      const s2 = document.createElement("script");
+      s2.src = "https://unpkg.com/lamejs@1.2.1/lame.min.js";
+      s2.onload = () => {
+        if (window.lamejs) resolve(window.lamejs);
+        else reject(new Error("lamejs 加载失败"));
+      };
+      s2.onerror = () => reject(new Error("无法加载 MP3 编码器，请检查网络"));
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+  });
+  return lameReady;
 }
 
-async function loadFFmpeg() {
-  if (ffmpegLoaded && ffmpeg) return;
+/**
+ * 用浏览器解码视频音轨 → PCM → lamejs 编码 MP3
+ * 不下载 25MB 引擎，手机几秒内可完成
+ */
+async function convertWithWebAudio(file, onProgress) {
+  const lamejs = await loadLame();
+  onProgress(8, "准备解码…");
 
-  progressText.textContent = "正在初始化转换引擎…";
-  progressFill.style.width = "3%";
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.src = url;
+  video.playsInline = true;
+  video.setAttribute("playsinline", "");
+  video.setAttribute("webkit-playsinline", "");
+  video.preload = "auto";
+  video.controls = false;
+  // 不静音：部分手机对 muted 视频不输出音轨到 WebAudio
+  video.muted = false;
+  video.volume = 0.001; // 几乎听不见，避免外放吵
 
-  const workerURL = new URL("ffmpeg/worker.js", window.location.href).href;
+  await new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("视频加载超时，请确认格式手机能播放")), 20000);
+    video.onloadedmetadata = () => {
+      clearTimeout(t);
+      resolve();
+    };
+    video.onerror = () => {
+      clearTimeout(t);
+      reject(new Error("无法解码该视频，请换 MP4（H.264）格式"));
+    };
+  });
 
-  // 确认 worker 可访问
+  const duration = video.duration;
+  if (!Number.isFinite(duration) || duration <= 0) {
+    URL.revokeObjectURL(url);
+    throw new Error("无法读取视频时长");
+  }
+
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const audioCtx = new AudioCtx();
+  // 部分浏览器需要 resume（用户已点击按钮，一般允许）
+  if (audioCtx.state === "suspended") {
+    await audioCtx.resume();
+  }
+
+  const source = audioCtx.createMediaElementSource(video);
+  const gain = audioCtx.createGain();
+  gain.gain.value = 0; // 完全静音输出，只采集
+
+  // ScriptProcessor：兼容性好（vivo 等）
+  const bufferSize = 4096;
+  const processor = audioCtx.createScriptProcessor(bufferSize, 2, 2);
+  const leftChunks = [];
+  const rightChunks = [];
+  let totalSamples = 0;
+
+  processor.onaudioprocess = (e) => {
+    const left = e.inputBuffer.getChannelData(0);
+    const right =
+      e.inputBuffer.numberOfChannels > 1
+        ? e.inputBuffer.getChannelData(1)
+        : left;
+    leftChunks.push(new Float32Array(left));
+    rightChunks.push(new Float32Array(right));
+    totalSamples += left.length;
+  };
+
+  source.connect(processor);
+  processor.connect(gain);
+  gain.connect(audioCtx.destination);
+
+  onProgress(12, "正在提取音频…");
+
+  // 播放以驱动解码（加速一点，但过高部分机型会丢数据）
   try {
-    const wg = await fetch(workerURL);
-    if (!wg.ok) {
-      throw new Error("无法加载 /ffmpeg/worker.js，请确认已上传 ffmpeg 文件夹后重新部署");
-    }
+    video.playbackRate = 1;
+    await video.play();
   } catch (e) {
-    if (String(e.message || e).includes("ffmpeg")) throw e;
-    console.warn("worker 探测:", e);
+    // 自动播放失败时尝试静音播放
+    video.muted = true;
+    video.volume = 0;
+    await video.play();
   }
 
-  // 先尝试「直连 CDN」（手机上往往比 blob 更稳），失败再下成本地 blob
-  let coreURL = null;
-  let wasmURL = null;
-  let lastErr = null;
+  await new Promise((resolve, reject) => {
+    const tick = () => {
+      if (video.ended) {
+        resolve();
+        return;
+      }
+      if (video.error) {
+        reject(new Error("播放失败，无法提取音轨"));
+        return;
+      }
+      const p = video.currentTime / duration;
+      onProgress(12 + Math.min(55, Math.round(p * 55)), "提取音频 " + Math.round(p * 100) + "%");
+      requestAnimationFrame(tick);
+    };
+    video.onended = () => resolve();
+    video.onerror = () => reject(new Error("播放失败，无法提取音轨"));
+    // 兜底：时长结束后强制结束
+    setTimeout(() => resolve(), (duration + 2) * 1000);
+    tick();
+  });
 
-  for (let i = 0; i < CORE_MIRRORS.length; i++) {
-    const base = CORE_MIRRORS[i];
-    const label = i + 1 + "/" + CORE_MIRRORS.length;
-    try {
-      progressText.textContent = "检测引擎源 " + label + "…";
-      progressFill.style.width = 5 + i * 3 + "%";
-      // 小文件探测是否可达
-      const probe = await fetch(base + "/ffmpeg-core.js", { method: "GET", mode: "cors" });
-      if (!probe.ok) throw new Error("HTTP " + probe.status);
-      // 直连 URL，不转 blob（避免部分手机 Worker 无法 import blob）
-      coreURL = base + "/ffmpeg-core.js";
-      wasmURL = base + "/ffmpeg-core.wasm";
-      progressText.textContent = "使用引擎源 " + label + "（直连）";
-      progressFill.style.width = "55%";
-      lastErr = null;
+  // 再等一帧，收尾缓冲
+  await new Promise((r) => setTimeout(r, 200));
+
+  try {
+    processor.disconnect();
+    source.disconnect();
+    gain.disconnect();
+  } catch (_) {}
+  try {
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+  } catch (_) {}
+  URL.revokeObjectURL(url);
+  const sampleRate = audioCtx.sampleRate;
+  try {
+    await audioCtx.close();
+  } catch (_) {}
+
+  if (totalSamples < 1000) {
+    throw new Error("未采集到有效音轨（视频可能无声音，或浏览器限制了音频采集）");
+  }
+
+  onProgress(70, "正在编码 MP3…");
+
+  // 合并通道
+  const left = new Float32Array(totalSamples);
+  const right = new Float32Array(totalSamples);
+  let offset = 0;
+  for (let i = 0; i < leftChunks.length; i++) {
+    left.set(leftChunks[i], offset);
+    right.set(rightChunks[i], offset);
+    offset += leftChunks[i].length;
+  }
+
+  // 目标采样率 44100：若设备采样率不同，简单抽取/重复（够用）
+  let L = left;
+  let R = right;
+  let rate = sampleRate;
+  if (Math.abs(sampleRate - 44100) > 100) {
+    const ratio = sampleRate / 44100;
+    const newLen = Math.floor(totalSamples / ratio);
+    L = new Float32Array(newLen);
+    R = new Float32Array(newLen);
+    for (let i = 0; i < newLen; i++) {
+      const idx = Math.min(totalSamples - 1, Math.floor(i * ratio));
+      L[i] = left[idx];
+      R[i] = right[idx];
+    }
+    rate = 44100;
+  }
+
+  const mp3encoder = new lamejs.Mp3Encoder(2, rate, 128);
+  const block = 1152;
+  const mp3Data = [];
+  const totalBlocks = Math.ceil(L.length / block);
+
+  for (let i = 0; i < L.length; i += block) {
+    const leftChunk = floatTo16BitPCM(L.subarray(i, i + block));
+    const rightChunk = floatTo16BitPCM(R.subarray(i, i + block));
+    const buf = mp3encoder.encodeBuffer(leftChunk, rightChunk);
+    if (buf.length > 0) mp3Data.push(buf);
+    if (i % (block * 20) === 0) {
+      const p = i / L.length;
+      onProgress(70 + Math.round(p * 25), "编码 MP3 " + Math.round(p * 100) + "%");
+    }
+  }
+  const end = mp3encoder.flush();
+  if (end.length > 0) mp3Data.push(end);
+
+  onProgress(98, "生成文件…");
+  return new Blob(mp3Data, { type: "audio/mpeg" });
+}
+
+/**
+ * 备用：MediaRecorder 录制（可能得到 m4a/webm，再提示）
+ */
+async function convertWithMediaRecorder(file, onProgress) {
+  onProgress(10, "使用备用方案提取…");
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.src = url;
+  video.playsInline = true;
+  video.setAttribute("playsinline", "");
+  video.muted = false;
+  video.volume = 0.001;
+
+  await new Promise((resolve, reject) => {
+    video.onloadedmetadata = resolve;
+    video.onerror = () => reject(new Error("无法加载视频"));
+    setTimeout(() => reject(new Error("加载超时")), 15000);
+  });
+
+  if (!video.captureStream && !video.mozCaptureStream) {
+    URL.revokeObjectURL(url);
+    throw new Error("当前浏览器不支持音轨采集");
+  }
+
+  await video.play();
+  const stream = video.captureStream ? video.captureStream() : video.mozCaptureStream();
+  const audioTracks = stream.getAudioTracks();
+  if (!audioTracks.length) {
+    video.pause();
+    URL.revokeObjectURL(url);
+    throw new Error("没有音轨可提取");
+  }
+  const audioStream = new MediaStream(audioTracks);
+
+  let mime = "";
+  const candidates = [
+    "audio/mp4",
+    "audio/mpeg",
+    "audio/webm;codecs=opus",
+    "audio/webm",
+  ];
+  for (const m of candidates) {
+    if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) {
+      mime = m;
       break;
-    } catch (e) {
-      console.warn("源不可用:", base, e);
-      lastErr = e;
     }
   }
-
-  // 直连全失败：下载为 blob
-  if (!coreURL) {
-    progressText.textContent = "直连失败，改为下载到本地…";
-    const loaded = await loadCoreFromMirrors();
-    coreURL = loaded.coreURL;
-    wasmURL = loaded.wasmURL;
+  if (!mime) {
+    video.pause();
+    URL.revokeObjectURL(url);
+    throw new Error("浏览器不支持录音编码");
   }
 
-  progressText.textContent = "正在启动引擎（手机可能需 30～90 秒）…";
-  progressFill.style.width = "60%";
-
-  ffmpeg = new FFmpeg();
-  ffmpeg.on("log", ({ message }) => {
-    if (message && /error|invalid|fail/i.test(message)) {
-      console.warn("[ffmpeg]", message);
-    }
+  const chunks = [];
+  const recorder = new MediaRecorder(audioStream, {
+    mimeType: mime,
+    audioBitsPerSecond: 128000,
   });
-  ffmpeg.on("progress", ({ progress }) => {
-    let pct = 78;
-    if (Number.isFinite(progress) && progress > 0) {
-      pct = Math.min(94, Math.round(78 + progress * 16));
-    }
-    progressFill.style.width = pct + "%";
-    progressText.textContent = "转换中… " + pct + "%";
+  recorder.ondataavailable = (e) => {
+    if (e.data && e.data.size) chunks.push(e.data);
+  };
+
+  const stopped = new Promise((resolve) => {
+    recorder.onstop = resolve;
+  });
+  recorder.start(200);
+
+  const duration = video.duration || 30;
+  await new Promise((resolve) => {
+    video.onended = resolve;
+    setTimeout(resolve, (duration + 1) * 1000);
+    const tick = () => {
+      if (video.ended) return;
+      const p = video.currentTime / duration;
+      onProgress(10 + Math.min(80, Math.round(p * 80)), "提取中 " + Math.round(p * 100) + "%");
+      requestAnimationFrame(tick);
+    };
+    tick();
   });
 
-  // 心跳：让用户知道没有卡死
-  let elapsed = 0;
-  const heartbeat = setInterval(() => {
-    elapsed += 1;
-    if (!ffmpegLoaded) {
-      progressText.textContent =
-        "正在启动引擎… 已等待 " + elapsed + " 秒（手机首次较慢，请勿关闭）";
-      const w = Math.min(76, 60 + Math.floor(elapsed / 5));
-      progressFill.style.width = w + "%";
-    }
-  }, 1000);
+  if (recorder.state !== "inactive") recorder.stop();
+  await stopped;
+  video.pause();
+  URL.revokeObjectURL(url);
 
-  try {
-    const loadPromise = ffmpeg.load({
-      coreURL,
-      wasmURL,
-      classWorkerURL: workerURL,
-    });
-
-    const timeoutPromise = new Promise((_, reject) => {
-      setTimeout(
-        () =>
-          reject(
-            new Error(
-              "引擎启动超时（超过 3 分钟）。请刷新后重试，关闭 VPN，或换 Chrome/系统浏览器。"
-            )
-          ),
-        180000
-      );
-    });
-
-    await Promise.race([loadPromise, timeoutPromise]);
-  } finally {
-    clearInterval(heartbeat);
-  }
-
-  ffmpegLoaded = true;
-  progressFill.style.width = "78%";
-  progressText.textContent = "引擎已就绪，写入文件…";
-}
-
-function getExt(name) {
-  const m = (name || "").match(/\.[a-z0-9]+$/i);
-  return m ? m[0].toLowerCase() : ".mp4";
-}
-
-/** 清理虚拟文件系统，释放内存 */
-async function cleanupFs(names) {
-  if (!ffmpeg) return;
-  for (const n of names) {
-    try {
-      await ffmpeg.deleteFile(n);
-    } catch (_) {}
-  }
-}
-
-/** 执行转换：优先取音轨，兼容无音轨失败与多格式容器 */
-async function runConvert(inputName, outputName) {
-  // 方案 A：标准提取第一路音频 → MP3
-  try {
-    await ffmpeg.exec([
-      "-hide_banner",
-      "-i", inputName,
-      "-vn",
-      "-map", "0:a:0",
-      "-c:a", "libmp3lame",
-      "-b:a", "192k",
-      "-ar", "44100",
-      "-ac", "2",
-      "-y",
-      outputName,
-    ]);
-    return;
-  } catch (e1) {
-    console.warn("方案A失败，尝试方案B", e1);
-  }
-
-  // 方案 B：不指定 map（部分容器音轨编号异常）
-  try {
-    await ffmpeg.exec([
-      "-hide_banner",
-      "-i", inputName,
-      "-vn",
-      "-c:a", "libmp3lame",
-      "-b:a", "192k",
-      "-ar", "44100",
-      "-ac", "2",
-      "-y",
-      outputName,
-    ]);
-    return;
-  } catch (e2) {
-    console.warn("方案B失败，尝试方案C", e2);
-  }
-
-  // 方案 C：更低码率，减轻内存压力
-  await ffmpeg.exec([
-    "-hide_banner",
-    "-i", inputName,
-    "-vn",
-    "-c:a", "libmp3lame",
-    "-b:a", "128k",
-    "-ar", "44100",
-    "-ac", "2",
-    "-y",
-    outputName,
-  ]);
+  const ext = mime.includes("mp4") || mime.includes("mpeg") ? "m4a" : "webm";
+  const blob = new Blob(chunks, { type: mime });
+  return { blob, ext };
 }
 
 convertBtn.addEventListener("click", async () => {
@@ -785,78 +821,56 @@ convertBtn.addEventListener("click", async () => {
   progressText.textContent = "准备中…";
   revokeLastBlob();
 
-  const inputName = "input" + getExt(selectedFile.name);
-  const outputName = "output.mp3";
+  const onProgress = (pct, text) => {
+    progressFill.style.width = Math.min(99, pct) + "%";
+    progressText.textContent = text;
+  };
 
   try {
-    await loadFFmpeg();
-
-    progressText.textContent = "正在读取文件…";
-    progressFill.style.width = "18%";
-
-    // 分片读取大文件，降低峰值内存
-    const data = new Uint8Array(await selectedFile.arrayBuffer());
-    await ffmpeg.writeFile(inputName, data);
-
-    progressText.textContent = "正在提取音频并编码 MP3…";
-    progressFill.style.width = "22%";
-
-    await runConvert(inputName, outputName);
-
-    progressFill.style.width = "94%";
-    progressText.textContent = "生成下载文件…";
-
-    const outputData = await ffmpeg.readFile(outputName);
-    // 注意：不要用 .buffer 整段 ArrayBuffer（可能含多余字节）
-    const bytes =
-      outputData instanceof Uint8Array
-        ? outputData
-        : new Uint8Array(outputData);
-    if (!bytes.length) {
-      throw new Error("输出为空，可能视频没有音轨");
+    let blob;
+    let ext = "mp3";
+    try {
+      blob = await convertWithWebAudio(selectedFile, onProgress);
+    } catch (e1) {
+      console.warn("主方案失败，尝试备用:", e1);
+      onProgress(5, "主方案失败，尝试备用方案…");
+      const alt = await convertWithMediaRecorder(selectedFile, onProgress);
+      blob = alt.blob;
+      ext = alt.ext;
     }
 
-    const blob = new Blob([bytes], { type: "audio/mpeg" });
+    if (!blob || blob.size < 100) {
+      throw new Error("输出文件为空");
+    }
+
     const url = URL.createObjectURL(blob);
     lastBlobUrl = url;
-
-    await cleanupFs([inputName, outputName]);
-
-    const baseName = (selectedFile.name || "audio").replace(/\.[^.]+$/, "") || "audio";
+    const baseName =
+      (selectedFile.name || "audio").replace(/\.[^.]+$/, "") || "audio";
     downloadLink.href = url;
-    downloadLink.download = baseName + ".mp3";
-    downloadLink.textContent = "下载 " + baseName + ".mp3";
+    downloadLink.download = baseName + "." + ext;
+    downloadLink.textContent =
+      "下载 " + baseName + "." + ext + "（" + formatSize(blob.size) + "）";
 
     progressFill.style.width = "100%";
-    progressText.textContent = "完成！";
+    progressText.textContent = ext === "mp3" ? "完成！" : "完成（备用格式 " + ext + "）";
     result.hidden = false;
   } catch (err) {
     console.error(err);
-    await cleanupFs([inputName, outputName]);
-    // 加载失败时允许下次重新初始化
-    if (!ffmpegLoaded) {
-      try { if (ffmpeg) ffmpeg.terminate(); } catch (_) {}
-      ffmpeg = null;
-    }
     const msg = String(err && err.message ? err.message : err);
-    let tip = "转换失败。";
-    if (/memory|out of memory|OOM|allocation|abort/i.test(msg)) {
-      tip = "下载中断或内存不足，请换 WiFi 后重试，或用更小的文件。";
-    } else if (/超时|timeout/i.test(msg)) {
-      tip = "引擎启动超时，请刷新页面后重试，建议关闭 VPN 或换网络。";
-    } else if (/no.*audio|does not contain|Invalid data|Stream map/i.test(msg)) {
-      tip = "无法找到音轨，请确认视频里包含声音。";
-    } else if (/Worker|classWorkerURL|Failed to construct|worker\.js/i.test(msg)) {
-      tip = "转换引擎加载失败，请确认已上传 ffmpeg 文件夹后重新部署。";
-    } else if (/所有镜像|HTTP|Failed to fetch|NetworkError/i.test(msg)) {
-      tip = "引擎文件下载失败，请检查网络后重试（首次需下载约 25MB）。";
+    let tip = "转换失败：" + msg;
+    if (/decode|无法解码|不支持/i.test(msg)) {
+      tip = "无法解码该视频。请导出为手机常见的 MP4（H.264 + AAC）后再试。";
+    } else if (/音轨|无声音|采集/i.test(msg)) {
+      tip = "未能提取到声音，请确认视频有音轨，并允许网站播放声音。";
     }
     progressText.textContent = tip;
-    alert(tip + "\n\n详情：" + msg.slice(0, 220));
+    alert(tip);
   } finally {
     convertBtn.disabled = false;
   }
 });
+
 
 /* 启动 */
 resizeCanvas();
