@@ -346,7 +346,7 @@ fxBar.addEventListener("click", (e) => {
   setFxMode(btn.dataset.fx, true);
 });
 
-/* ========== MP4 → MP3 ========== */
+/* ========== 视频 → MP3 ========== */
 const openConverter = document.getElementById("openConverter");
 const converterModal = document.getElementById("converterModal");
 const converterMask = document.getElementById("converterMask");
@@ -364,9 +364,16 @@ const progressText = document.getElementById("progressText");
 const result = document.getElementById("result");
 const downloadLink = document.getElementById("downloadLink");
 
+/** 约 5 分钟高码率视频的安全上限（浏览器内存限制） */
+const MAX_FILE_BYTES = 150 * 1024 * 1024; // 150 MB
+const MAX_DURATION_SEC = 5 * 60 + 15; // 5 分钟，略放宽 15 秒
+const VIDEO_EXT_RE =
+  /\.(mp4|webm|mov|mkv|avi|flv|wmv|m4v|3gp|ts|mts|m2ts|mpeg|mpg|mpe|ogv|vob|asf|rm|rmvb|f4v|divx|xvid|mp3|m4a|aac|wav|ogg|flac|wma)$/i;
+
 let selectedFile = null;
 let ffmpeg = null;
 let ffmpegLoaded = false;
+let lastBlobUrl = null;
 
 openConverter.addEventListener("click", () => {
   converterModal.hidden = false;
@@ -403,21 +410,85 @@ uploadArea.addEventListener("drop", (e) => {
   if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
 });
 
-function handleFile(file) {
-  const ok =
-    file.type.startsWith("video/") ||
-    /\.(mp4|webm|mov|mkv|avi)$/i.test(file.name);
-  if (!ok) {
-    alert("请选择视频文件（MP4 / WebM 等）");
+function isMediaFile(file) {
+  if (!file) return false;
+  if (file.type && (file.type.startsWith("video/") || file.type.startsWith("audio/"))) {
+    return true;
+  }
+  return VIDEO_EXT_RE.test(file.name || "");
+}
+
+/** 用浏览器探测时长（无法探测时返回 null，不拦截） */
+function probeDuration(file) {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const el = document.createElement("video");
+    el.preload = "metadata";
+    const done = (sec) => {
+      URL.revokeObjectURL(url);
+      el.removeAttribute("src");
+      el.load();
+      resolve(sec);
+    };
+    el.onloadedmetadata = () => {
+      const d = el.duration;
+      done(Number.isFinite(d) && d > 0 ? d : null);
+    };
+    el.onerror = () => done(null);
+    setTimeout(() => done(null), 8000);
+    el.src = url;
+  });
+}
+
+async function handleFile(file) {
+  if (!isMediaFile(file)) {
+    alert("请选择视频或音频文件\n支持：MP4 / MOV / MKV / WebM / AVI / FLV / 3GP 等");
     return;
   }
+
+  if (file.size > MAX_FILE_BYTES) {
+    alert(
+      "文件过大（" +
+        formatSize(file.size) +
+        "），建议不超过 150MB。\n过大会导致手机/浏览器内存不足而失败。"
+    );
+    return;
+  }
+
+  progressWrap.hidden = false;
+  progressText.textContent = "正在检测文件…";
+  progressFill.style.width = "5%";
+  convertBtn.disabled = true;
+
+  const duration = await probeDuration(file);
+  if (duration != null && duration > MAX_DURATION_SEC) {
+    progressWrap.hidden = true;
+    convertBtn.disabled = true;
+    alert(
+      "视频时长约 " +
+        Math.round(duration) +
+        " 秒，超过 5 分钟限制。\n请裁剪后再转换。"
+    );
+    return;
+  }
+
   selectedFile = file;
-  fileName.textContent = file.name + "（" + formatSize(file.size) + "）";
+  let label = file.name + "（" + formatSize(file.size) + "）";
+  if (duration != null) {
+    label += " · " + formatDuration(duration);
+  }
+  fileName.textContent = label;
   uploadContent.hidden = true;
   fileInfo.hidden = false;
   convertBtn.disabled = false;
   result.hidden = true;
   progressWrap.hidden = true;
+}
+
+function formatDuration(sec) {
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return m + ":" + String(s).padStart(2, "0");
 }
 
 clearBtn.addEventListener("click", (e) => {
@@ -429,10 +500,15 @@ clearBtn.addEventListener("click", (e) => {
   convertBtn.disabled = true;
   result.hidden = true;
   progressWrap.hidden = true;
-  if (downloadLink.href && downloadLink.href.startsWith("blob:")) {
-    URL.revokeObjectURL(downloadLink.href);
-  }
+  revokeLastBlob();
 });
+
+function revokeLastBlob() {
+  if (lastBlobUrl) {
+    URL.revokeObjectURL(lastBlobUrl);
+    lastBlobUrl = null;
+  }
+}
 
 function formatSize(bytes) {
   if (bytes < 1024) return bytes + " B";
@@ -441,15 +517,24 @@ function formatSize(bytes) {
 }
 
 async function loadFFmpeg() {
-  if (ffmpegLoaded) return;
+  if (ffmpegLoaded && ffmpeg) return;
 
-  progressWrap.hidden = false;
   progressText.textContent = "正在加载转换引擎（首次约需几秒）…";
   progressFill.style.width = "8%";
 
   ffmpeg = new FFmpeg();
-  ffmpeg.on("progress", ({ progress }) => {
-    const pct = Math.min(95, Math.round(progress * 100));
+  ffmpeg.on("log", ({ message }) => {
+    // 便于排查：可在控制台查看
+    if (message && /error|invalid|fail/i.test(message)) {
+      console.warn("[ffmpeg]", message);
+    }
+  });
+  ffmpeg.on("progress", ({ progress, time }) => {
+    // progress 可能为 NaN，用 time 兜底
+    let pct = 20;
+    if (Number.isFinite(progress) && progress > 0) {
+      pct = Math.min(92, Math.round(20 + progress * 72));
+    }
     progressFill.style.width = pct + "%";
     progressText.textContent = "转换中… " + pct + "%";
   });
@@ -465,7 +550,75 @@ async function loadFFmpeg() {
 
   ffmpegLoaded = true;
   progressFill.style.width = "15%";
-  progressText.textContent = "引擎加载完成，开始转换…";
+  progressText.textContent = "引擎已就绪，写入文件…";
+}
+
+function getExt(name) {
+  const m = (name || "").match(/\.[a-z0-9]+$/i);
+  return m ? m[0].toLowerCase() : ".mp4";
+}
+
+/** 清理虚拟文件系统，释放内存 */
+async function cleanupFs(names) {
+  if (!ffmpeg) return;
+  for (const n of names) {
+    try {
+      await ffmpeg.deleteFile(n);
+    } catch (_) {}
+  }
+}
+
+/** 执行转换：优先取音轨，兼容无音轨失败与多格式容器 */
+async function runConvert(inputName, outputName) {
+  // 方案 A：标准提取第一路音频 → MP3
+  try {
+    await ffmpeg.exec([
+      "-hide_banner",
+      "-i", inputName,
+      "-vn",
+      "-map", "0:a:0",
+      "-c:a", "libmp3lame",
+      "-b:a", "192k",
+      "-ar", "44100",
+      "-ac", "2",
+      "-y",
+      outputName,
+    ]);
+    return;
+  } catch (e1) {
+    console.warn("方案A失败，尝试方案B", e1);
+  }
+
+  // 方案 B：不指定 map（部分容器音轨编号异常）
+  try {
+    await ffmpeg.exec([
+      "-hide_banner",
+      "-i", inputName,
+      "-vn",
+      "-c:a", "libmp3lame",
+      "-b:a", "192k",
+      "-ar", "44100",
+      "-ac", "2",
+      "-y",
+      outputName,
+    ]);
+    return;
+  } catch (e2) {
+    console.warn("方案B失败，尝试方案C", e2);
+  }
+
+  // 方案 C：更低码率，减轻内存压力
+  await ffmpeg.exec([
+    "-hide_banner",
+    "-i", inputName,
+    "-vn",
+    "-c:a", "libmp3lame",
+    "-b:a", "128k",
+    "-ar", "44100",
+    "-ac", "2",
+    "-y",
+    outputName,
+  ]);
 }
 
 convertBtn.addEventListener("click", async () => {
@@ -476,40 +629,46 @@ convertBtn.addEventListener("click", async () => {
   progressWrap.hidden = false;
   progressFill.style.width = "0%";
   progressText.textContent = "准备中…";
+  revokeLastBlob();
+
+  const inputName = "input" + getExt(selectedFile.name);
+  const outputName = "output.mp3";
 
   try {
     await loadFFmpeg();
 
-    const inputName = "input" + getExt(selectedFile.name);
-    const outputName = "output.mp3";
+    progressText.textContent = "正在读取文件…";
+    progressFill.style.width = "18%";
 
+    // 分片读取大文件，降低峰值内存
     const data = new Uint8Array(await selectedFile.arrayBuffer());
     await ffmpeg.writeFile(inputName, data);
 
-    progressText.textContent = "正在提取音频…";
-    progressFill.style.width = "20%";
+    progressText.textContent = "正在提取音频并编码 MP3…";
+    progressFill.style.width = "22%";
 
-    await ffmpeg.exec([
-      "-i", inputName,
-      "-vn",
-      "-acodec", "libmp3lame",
-      "-q:a", "2",
-      outputName,
-    ]);
+    await runConvert(inputName, outputName);
 
-    progressFill.style.width = "98%";
-    progressText.textContent = "生成文件中…";
+    progressFill.style.width = "94%";
+    progressText.textContent = "生成下载文件…";
 
     const outputData = await ffmpeg.readFile(outputName);
-    const blob = new Blob([outputData.buffer], { type: "audio/mpeg" });
+    // 注意：不要用 .buffer 整段 ArrayBuffer（可能含多余字节）
+    const bytes =
+      outputData instanceof Uint8Array
+        ? outputData
+        : new Uint8Array(outputData);
+    if (!bytes.length) {
+      throw new Error("输出为空，可能视频没有音轨");
+    }
+
+    const blob = new Blob([bytes], { type: "audio/mpeg" });
     const url = URL.createObjectURL(blob);
+    lastBlobUrl = url;
 
-    try {
-      await ffmpeg.deleteFile(inputName);
-      await ffmpeg.deleteFile(outputName);
-    } catch (_) {}
+    await cleanupFs([inputName, outputName]);
 
-    const baseName = selectedFile.name.replace(/\.[^.]+$/, "") || "audio";
+    const baseName = (selectedFile.name || "audio").replace(/\.[^.]+$/, "") || "audio";
     downloadLink.href = url;
     downloadLink.download = baseName + ".mp3";
     downloadLink.textContent = "下载 " + baseName + ".mp3";
@@ -519,20 +678,22 @@ convertBtn.addEventListener("click", async () => {
     result.hidden = false;
   } catch (err) {
     console.error(err);
-    progressText.textContent = "转换失败：" + (err.message || "未知错误");
-    alert(
-      "转换失败，请确认文件是否为有效视频，或尝试更小的文件。\n\n" +
-        (err.message || "")
-    );
+    await cleanupFs([inputName, outputName]);
+    const msg = String(err && err.message ? err.message : err);
+    let tip = "转换失败。";
+    if (/memory|out of memory|OOM|allocation/i.test(msg)) {
+      tip = "内存不足，请换更小的文件或压缩后再试。";
+    } else if (/no.*audio|does not contain|Invalid data|Stream map/i.test(msg)) {
+      tip = "无法找到音轨，请确认视频里包含声音。";
+    } else if (/Worker|classWorkerURL|Failed to construct/i.test(msg)) {
+      tip = "转换引擎加载失败，请确认已上传 ffmpeg 文件夹后重新部署。";
+    }
+    progressText.textContent = tip;
+    alert(tip + "\n\n详情：" + msg.slice(0, 200));
   } finally {
     convertBtn.disabled = false;
   }
 });
-
-function getExt(name) {
-  const m = name.match(/\.[^.]+$/);
-  return m ? m[0].toLowerCase() : ".mp4";
-}
 
 /* 启动 */
 resizeCanvas();
