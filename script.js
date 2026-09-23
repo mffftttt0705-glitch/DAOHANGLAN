@@ -602,6 +602,7 @@ async function loadFFmpeg() {
 
   const workerURL = new URL("ffmpeg/worker.js", window.location.href).href;
 
+  // 确认 worker 可访问
   try {
     const wg = await fetch(workerURL);
     if (!wg.ok) {
@@ -612,10 +613,43 @@ async function loadFFmpeg() {
     console.warn("worker 探测:", e);
   }
 
-  const { coreURL, wasmURL } = await loadCoreFromMirrors();
+  // 先尝试「直连 CDN」（手机上往往比 blob 更稳），失败再下成本地 blob
+  let coreURL = null;
+  let wasmURL = null;
+  let lastErr = null;
 
-  progressText.textContent = "正在启动引擎…";
-  progressFill.style.width = "68%";
+  for (let i = 0; i < CORE_MIRRORS.length; i++) {
+    const base = CORE_MIRRORS[i];
+    const label = i + 1 + "/" + CORE_MIRRORS.length;
+    try {
+      progressText.textContent = "检测引擎源 " + label + "…";
+      progressFill.style.width = 5 + i * 3 + "%";
+      // 小文件探测是否可达
+      const probe = await fetch(base + "/ffmpeg-core.js", { method: "GET", mode: "cors" });
+      if (!probe.ok) throw new Error("HTTP " + probe.status);
+      // 直连 URL，不转 blob（避免部分手机 Worker 无法 import blob）
+      coreURL = base + "/ffmpeg-core.js";
+      wasmURL = base + "/ffmpeg-core.wasm";
+      progressText.textContent = "使用引擎源 " + label + "（直连）";
+      progressFill.style.width = "55%";
+      lastErr = null;
+      break;
+    } catch (e) {
+      console.warn("源不可用:", base, e);
+      lastErr = e;
+    }
+  }
+
+  // 直连全失败：下载为 blob
+  if (!coreURL) {
+    progressText.textContent = "直连失败，改为下载到本地…";
+    const loaded = await loadCoreFromMirrors();
+    coreURL = loaded.coreURL;
+    wasmURL = loaded.wasmURL;
+  }
+
+  progressText.textContent = "正在启动引擎（手机可能需 30～90 秒）…";
+  progressFill.style.width = "60%";
 
   ffmpeg = new FFmpeg();
   ffmpeg.on("log", ({ message }) => {
@@ -624,31 +658,52 @@ async function loadFFmpeg() {
     }
   });
   ffmpeg.on("progress", ({ progress }) => {
-    let pct = 75;
+    let pct = 78;
     if (Number.isFinite(progress) && progress > 0) {
-      pct = Math.min(92, Math.round(75 + progress * 17));
+      pct = Math.min(94, Math.round(78 + progress * 16));
     }
     progressFill.style.width = pct + "%";
     progressText.textContent = "转换中… " + pct + "%";
   });
 
-  const loadPromise = ffmpeg.load({
-    coreURL,
-    wasmURL,
-    classWorkerURL: workerURL,
-  });
+  // 心跳：让用户知道没有卡死
+  let elapsed = 0;
+  const heartbeat = setInterval(() => {
+    elapsed += 1;
+    if (!ffmpegLoaded) {
+      progressText.textContent =
+        "正在启动引擎… 已等待 " + elapsed + " 秒（手机首次较慢，请勿关闭）";
+      const w = Math.min(76, 60 + Math.floor(elapsed / 5));
+      progressFill.style.width = w + "%";
+    }
+  }, 1000);
 
-  const timeoutPromise = new Promise((_, reject) => {
-    setTimeout(
-      () => reject(new Error("引擎启动超时，请刷新页面后重试，或换 WiFi/关闭 VPN")),
-      90000
-    );
-  });
+  try {
+    const loadPromise = ffmpeg.load({
+      coreURL,
+      wasmURL,
+      classWorkerURL: workerURL,
+    });
 
-  await Promise.race([loadPromise, timeoutPromise]);
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(
+        () =>
+          reject(
+            new Error(
+              "引擎启动超时（超过 3 分钟）。请刷新后重试，关闭 VPN，或换 Chrome/系统浏览器。"
+            )
+          ),
+        180000
+      );
+    });
+
+    await Promise.race([loadPromise, timeoutPromise]);
+  } finally {
+    clearInterval(heartbeat);
+  }
 
   ffmpegLoaded = true;
-  progressFill.style.width = "72%";
+  progressFill.style.width = "78%";
   progressText.textContent = "引擎已就绪，写入文件…";
 }
 
