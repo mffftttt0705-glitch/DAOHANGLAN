@@ -1,7 +1,163 @@
 import { FFmpeg } from "https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.10/dist/esm/index.js";
 import { toBlobURL } from "https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/esm/index.js";
 
-/* ========== DOM ========== */
+const PASSWORD = "@55ff";
+const STORAGE_KEY = "nav_profile_v1";
+
+/* ========== 个人资料 DOM ========== */
+const avatarImg = document.getElementById("avatarImg");
+const avatarPlaceholder = document.getElementById("avatarPlaceholder");
+const displayName = document.getElementById("displayName");
+const displayBio = document.getElementById("displayBio");
+const customBg = document.getElementById("customBg");
+
+const settingsBtn = document.getElementById("settingsBtn");
+const settingsModal = document.getElementById("settingsModal");
+const modalMask = document.getElementById("modalMask");
+const closeModal = document.getElementById("closeModal");
+const pwdInput = document.getElementById("pwdInput");
+const settingsForm = document.getElementById("settingsForm");
+const nameInput = document.getElementById("nameInput");
+const bioInput = document.getElementById("bioInput");
+const avatarUrlInput = document.getElementById("avatarUrlInput");
+const avatarFileInput = document.getElementById("avatarFileInput");
+const bgUrlInput = document.getElementById("bgUrlInput");
+const bgFileInput = document.getElementById("bgFileInput");
+const clearBgBtn = document.getElementById("clearBgBtn");
+const saveBtn = document.getElementById("saveBtn");
+
+/* ========== 读取 / 应用资料 ========== */
+function loadProfile() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return applyProfile({});
+    applyProfile(JSON.parse(raw));
+  } catch {
+    applyProfile({});
+  }
+}
+
+function applyProfile(data) {
+  const name = data.name || "未设置昵称";
+  const bio = data.bio || "点击右下角设置进行个性化";
+  displayName.textContent = name;
+  displayBio.textContent = bio;
+  nameInput.value = data.name || "";
+  bioInput.value = data.bio || "";
+  avatarUrlInput.value = data.avatarUrl || "";
+  bgUrlInput.value = data.bgUrl || "";
+
+  if (data.avatarUrl) {
+    avatarImg.src = data.avatarUrl;
+    avatarImg.hidden = false;
+    avatarPlaceholder.hidden = true;
+  } else {
+    avatarImg.hidden = true;
+    avatarPlaceholder.hidden = false;
+    avatarImg.removeAttribute("src");
+  }
+
+  if (data.bgUrl) {
+    customBg.style.backgroundImage = `url("${data.bgUrl}")`;
+    customBg.classList.add("show");
+  } else {
+    customBg.style.backgroundImage = "";
+    customBg.classList.remove("show");
+  }
+}
+
+function saveProfile(data) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  applyProfile(data);
+}
+
+/* 文件转 base64（用于本地上传头像/背景，存 localStorage） */
+function fileToDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ========== 设置面板 ========== */
+settingsBtn.addEventListener("click", () => {
+  pwdInput.value = "";
+  settingsForm.hidden = true;
+  settingsModal.hidden = false;
+  pwdInput.focus();
+});
+
+function closeSettings() {
+  settingsModal.hidden = true;
+}
+
+closeModal.addEventListener("click", closeSettings);
+modalMask.addEventListener("click", closeSettings);
+
+pwdInput.addEventListener("input", () => {
+  if (pwdInput.value === PASSWORD) {
+    settingsForm.hidden = false;
+  } else {
+    settingsForm.hidden = true;
+  }
+});
+
+saveBtn.addEventListener("click", async () => {
+  if (pwdInput.value !== PASSWORD) {
+    alert("密码错误");
+    return;
+  }
+
+  let avatarUrl = avatarUrlInput.value.trim();
+  let bgUrl = bgUrlInput.value.trim();
+
+  if (avatarFileInput.files[0]) {
+    try {
+      avatarUrl = await fileToDataURL(avatarFileInput.files[0]);
+    } catch {
+      alert("头像读取失败");
+      return;
+    }
+  }
+
+  if (bgFileInput.files[0]) {
+    try {
+      bgUrl = await fileToDataURL(bgFileInput.files[0]);
+    } catch {
+      alert("背景图读取失败");
+      return;
+    }
+  }
+
+  try {
+    saveProfile({
+      name: nameInput.value.trim(),
+      bio: bioInput.value.trim(),
+      avatarUrl,
+      bgUrl,
+    });
+    avatarFileInput.value = "";
+    bgFileInput.value = "";
+    alert("已保存");
+    closeSettings();
+  } catch (e) {
+    console.error(e);
+    alert("保存失败，图片可能过大，请换用网络图片链接或压缩后再试");
+  }
+});
+
+clearBgBtn.addEventListener("click", () => {
+  bgUrlInput.value = "";
+  bgFileInput.value = "";
+});
+
+/* ========== MP4 → MP3 ========== */
+const openConverter = document.getElementById("openConverter");
+const converterModal = document.getElementById("converterModal");
+const converterMask = document.getElementById("converterMask");
+const closeConverter = document.getElementById("closeConverter");
 const uploadArea = document.getElementById("uploadArea");
 const fileInput = document.getElementById("fileInput");
 const uploadContent = document.getElementById("uploadContent");
@@ -19,7 +175,17 @@ let selectedFile = null;
 let ffmpeg = null;
 let ffmpegLoaded = false;
 
-/* ========== 文件选择 ========== */
+openConverter.addEventListener("click", () => {
+  converterModal.hidden = false;
+});
+
+function closeConv() {
+  converterModal.hidden = true;
+}
+
+closeConverter.addEventListener("click", closeConv);
+converterMask.addEventListener("click", closeConv);
+
 uploadArea.addEventListener("click", (e) => {
   if (e.target === clearBtn || clearBtn.contains(e.target)) return;
   fileInput.click();
@@ -81,11 +247,6 @@ function formatSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + " MB";
 }
 
-/* ========== 加载 ffmpeg ==========
- * Worker 必须从本站同域名加载，否则会报：
- * Failed to construct 'Worker': Script at '...cdn.../worker.js' cannot be accessed from origin '...'
- * core / wasm 体积大，用 CDN + toBlobURL 即可（blob 不触发跨域 Worker 限制）
- */
 async function loadFFmpeg() {
   if (ffmpegLoaded) return;
 
@@ -94,17 +255,13 @@ async function loadFFmpeg() {
   progressFill.style.width = "8%";
 
   ffmpeg = new FFmpeg();
-
   ffmpeg.on("progress", ({ progress }) => {
     const pct = Math.min(95, Math.round(progress * 100));
     progressFill.style.width = pct + "%";
     progressText.textContent = "转换中… " + pct + "%";
   });
 
-  // 本站 worker（解决跨域）
   const workerURL = new URL("ffmpeg/worker.js", window.location.href).href;
-
-  // core / wasm 仍走 CDN，转成 blob 避免 CORS
   const coreBase = "https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/esm";
 
   await ffmpeg.load({
@@ -118,7 +275,6 @@ async function loadFFmpeg() {
   progressText.textContent = "引擎加载完成，开始转换…";
 }
 
-/* ========== 转换 ========== */
 convertBtn.addEventListener("click", async () => {
   if (!selectedFile) return;
 
@@ -184,3 +340,6 @@ function getExt(name) {
   const m = name.match(/\.[^.]+$/);
   return m ? m[0].toLowerCase() : ".mp4";
 }
+
+/* 启动 */
+loadProfile();
