@@ -3,82 +3,126 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>工具导航 · 液态玻璃</title>
+  <title>工具导航</title>
   <link rel="stylesheet" href="style.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;600&display=swap" rel="stylesheet">
 </head>
 <body>
-  <!-- 动态液态背景 -->
-  <div class="liquid-bg">
+  <!-- 液态背景 -->
+  <div class="liquid-bg" id="liquidBg">
     <div class="blob blob-1"></div>
     <div class="blob blob-2"></div>
     <div class="blob blob-3"></div>
   </div>
+  <!-- 自定义背景图层 -->
+  <div class="custom-bg" id="customBg"></div>
+  <div class="bg-overlay"></div>
 
-  <div class="container">
-    <!-- 标题 -->
-    <header class="header glass">
-      <h1>工具导航</h1>
-      <p>液态玻璃 · 简洁高效</p>
-    </header>
-
-    <!-- 两个站点入口 -->
-    <section class="cards">
-      <a href="https://wangye-zhizuo-diy.pages.dev/" target="_blank" rel="noopener" class="card glass">
-        <div class="card-icon">🌐</div>
-        <h2>网页DIY制作</h2>
-        <p>在线制作与自定义网页</p>
-        <span class="card-arrow">→</span>
-      </a>
-
-      <a href="https://qw-frontend-4i2.pages.dev/" target="_blank" rel="noopener" class="card glass">
-        <div class="card-icon">🎮</div>
-        <h2>游戏陪玩护航</h2>
-        <p>游戏陪玩与护航服务</p>
-        <span class="card-arrow">→</span>
-      </a>
+  <div class="page">
+    <!-- 个人区：头像 + 文字 -->
+    <section class="profile">
+      <div class="avatar-wrap">
+        <img id="avatarImg" class="avatar" src="" alt="头像" hidden />
+        <div id="avatarPlaceholder" class="avatar placeholder">+</div>
+      </div>
+      <h1 id="displayName" class="name">未设置昵称</h1>
+      <p id="displayBio" class="bio">点击右下角设置进行个性化</p>
     </section>
 
-    <!-- MP4 转 MP3 -->
-    <section class="converter glass">
-      <h2>MP4 → MP3 转换</h2>
-      <p class="desc">在浏览器本地转换，文件不会上传到服务器</p>
+    <!-- 功能入口：简约线条框 -->
+    <section class="links">
+      <a href="https://wangye-zhizuo-diy.pages.dev/" target="_blank" rel="noopener" class="link-box">
+        <span class="link-title">网页DIY制作</span>
+        <span class="link-desc">在线制作与自定义网页</span>
+      </a>
+      <a href="https://qw-frontend-4i2.pages.dev/" target="_blank" rel="noopener" class="link-box">
+        <span class="link-title">游戏陪玩护航</span>
+        <span class="link-desc">游戏陪玩与护航服务</span>
+      </a>
+      <button type="button" class="link-box" id="openConverter">
+        <span class="link-title">MP4 → MP3</span>
+        <span class="link-desc">本地转换，不上传服务器</span>
+      </button>
+    </section>
+  </div>
+
+  <!-- 右下角设置 -->
+  <button type="button" class="fab" id="settingsBtn" title="设置">⚙</button>
+
+  <!-- 设置面板 -->
+  <div class="modal" id="settingsModal" hidden>
+    <div class="modal-mask" id="modalMask"></div>
+    <div class="modal-panel glass">
+      <h2>个性化设置</h2>
+      <p class="modal-hint">需要密码才能修改</p>
+
+      <div class="field">
+        <label>密码</label>
+        <input type="password" id="pwdInput" placeholder="输入密码" autocomplete="off" />
+      </div>
+
+      <div id="settingsForm" class="settings-form" hidden>
+        <div class="field">
+          <label>昵称</label>
+          <input type="text" id="nameInput" placeholder="显示名称" maxlength="20" />
+        </div>
+        <div class="field">
+          <label>简介</label>
+          <input type="text" id="bioInput" placeholder="一句话介绍" maxlength="40" />
+        </div>
+        <div class="field">
+          <label>头像（图片链接或本地上传）</label>
+          <input type="text" id="avatarUrlInput" placeholder="https://... 图片地址" />
+          <input type="file" id="avatarFileInput" accept="image/*" />
+        </div>
+        <div class="field">
+          <label>背景图（图片链接或本地上传）</label>
+          <input type="text" id="bgUrlInput" placeholder="https://... 图片地址" />
+          <input type="file" id="bgFileInput" accept="image/*" />
+          <button type="button" class="btn-text" id="clearBgBtn">清除背景图</button>
+        </div>
+        <button type="button" class="btn primary" id="saveBtn">保存</button>
+      </div>
+
+      <button type="button" class="btn ghost" id="closeModal">关闭</button>
+    </div>
+  </div>
+
+  <!-- 转换面板 -->
+  <div class="modal" id="converterModal" hidden>
+    <div class="modal-mask" id="converterMask"></div>
+    <div class="modal-panel glass converter-panel">
+      <h2>MP4 → MP3</h2>
+      <p class="modal-hint">浏览器本地转换，文件不会上传</p>
 
       <div class="upload-area" id="uploadArea">
         <input type="file" id="fileInput" accept="video/mp4,video/*,.mp4" hidden />
         <div class="upload-content" id="uploadContent">
-          <div class="upload-icon">📁</div>
-          <p>点击或拖拽 MP4 文件到这里</p>
-          <span class="hint">支持 MP4 / WebM 等常见视频格式</span>
+          <p>点击或拖拽视频到这里</p>
+          <span class="hint">支持 MP4 / WebM 等</span>
         </div>
         <div class="file-info" id="fileInfo" hidden>
           <span id="fileName"></span>
-          <button type="button" class="btn-clear" id="clearBtn">清除</button>
+          <button type="button" class="btn-text" id="clearBtn">清除</button>
         </div>
       </div>
 
-      <div class="actions">
-        <button type="button" class="btn primary" id="convertBtn" disabled>开始转换</button>
-      </div>
+      <button type="button" class="btn primary" id="convertBtn" disabled>开始转换</button>
 
       <div class="progress-wrap" id="progressWrap" hidden>
-        <div class="progress-bar">
-          <div class="progress-fill" id="progressFill"></div>
-        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
         <p class="progress-text" id="progressText">准备中…</p>
       </div>
 
       <div class="result" id="result" hidden>
-        <p>转换完成！</p>
+        <p class="ok">转换完成</p>
         <a id="downloadLink" class="btn primary" download="output.mp3">下载 MP3</a>
       </div>
-    </section>
 
-    <footer class="footer">
-      <p>本地处理 · 隐私安全 · Cloudflare Pages</p>
-    </footer>
+      <button type="button" class="btn ghost" id="closeConverter">关闭</button>
+    </div>
   </div>
 
   <script type="module" src="script.js"></script>
