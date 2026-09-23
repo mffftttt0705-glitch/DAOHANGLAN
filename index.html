@@ -66,8 +66,8 @@
         <span class="link-desc">游戏陪玩与护航服务</span>
       </a>
       <button type="button" class="link-box" id="openConverter">
-        <span class="link-title">MP4 → MP3</span>
-        <span class="link-desc">本地转换，不上传服务器</span>
+        <span class="link-title">视频 → MP3</span>
+        <span class="link-desc">本地转换，支持常见视频格式</span>
       </button>
     </section>
 
@@ -138,14 +138,14 @@
   <div class="modal" id="converterModal" hidden>
     <div class="modal-mask" id="converterMask"></div>
     <div class="modal-panel glass converter-panel">
-      <h2>MP4 → MP3</h2>
-      <p class="modal-hint">浏览器本地转换，文件不会上传</p>
+      <h2>视频 → MP3</h2>
+      <p class="modal-hint">浏览器本地转换，文件不上传 · 建议 ≤5 分钟、≤150MB</p>
 
       <div class="upload-area" id="uploadArea">
-        <input type="file" id="fileInput" accept="video/mp4,video/*,.mp4" hidden />
+        <input type="file" id="fileInput" accept="video/*,audio/*,.mp4,.webm,.mov,.mkv,.avi,.flv,.wmv,.m4v,.3gp,.ts,.mpeg,.mpg,.ogv,.m4a" hidden />
         <div class="upload-content" id="uploadContent">
           <p>点击或拖拽视频到这里</p>
-          <span class="hint">支持 MP4 / WebM 等</span>
+          <span class="hint">MP4 / MOV / MKV / WebM / AVI 等均可</span>
         </div>
         <div class="file-info" id="fileInfo" hidden>
           <span id="fileName"></span>
