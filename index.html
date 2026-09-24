@@ -16,7 +16,10 @@
     <div class="blob blob-2"></div>
     <div class="blob blob-3"></div>
   </div>
+  <!-- 图片背景 -->
   <div class="custom-bg" id="customBg"></div>
+  <!-- 视频背景 -->
+  <video id="bgVideo" class="bg-video" autoplay muted loop playsinline></video>
   <div class="bg-overlay"></div>
 
   <!-- 特效画布：花瓣 / 雪花 / 雨 -->
@@ -78,6 +81,11 @@
     </div>
   </div>
 
+  <!-- 背景快捷切换（无需密码） -->
+  <div class="bg-bar" id="bgBar" hidden>
+    <!-- 由 JS 动态填充按钮 -->
+  </div>
+
   <!-- 特效快捷切换（无需密码） -->
   <div class="fx-bar" id="fxBar">
     <button type="button" class="fx-btn active" data-fx="none" title="无特效">关</button>
@@ -113,12 +121,23 @@
           <input type="text" id="avatarUrlInput" placeholder="https://... 图片地址" />
           <input type="file" id="avatarFileInput" accept="image/*" />
         </div>
+
         <div class="field">
-          <label>背景图（图片链接或本地上传）</label>
-          <input type="text" id="bgUrlInput" placeholder="https://... 图片地址" />
+          <label>背景列表（支持多张图片 / 视频，可随时切换）</label>
+          <div id="bgList" class="bg-list"></div>
+          <div class="bg-add-row">
+            <input type="text" id="bgLabelInput" placeholder="备注名（可选）" maxlength="12" />
+            <select id="bgTypeSelect">
+              <option value="image">图片</option>
+              <option value="video">视频</option>
+            </select>
+          </div>
+          <input type="text" id="bgUrlInput" placeholder="https://... 图片或视频地址（视频必须用链接）" />
           <input type="file" id="bgFileInput" accept="image/*" />
-          <button type="button" class="btn-text" id="clearBgBtn">清除背景图</button>
+          <p class="field-tip">视频请上传到免费图床/网盘后粘贴直链；本地图片可直接上传（会转 base64 存入 KV，建议 &lt; 800KB）</p>
+          <button type="button" class="btn-text" id="addBgBtn">＋ 添加到背景列表</button>
         </div>
+
         <div class="field">
           <label>飘落特效</label>
           <select id="fxSelect">
@@ -128,7 +147,7 @@
             <option value="rain">下雨</option>
           </select>
         </div>
-        <button type="button" class="btn primary" id="saveBtn">保存</button>
+        <button type="button" class="btn primary" id="saveBtn">保存到云端（所有人可见）</button>
       </div>
 
       <button type="button" class="btn ghost" id="closeModal">关闭</button>
