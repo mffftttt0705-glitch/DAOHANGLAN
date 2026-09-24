@@ -94,6 +94,23 @@ body {
   opacity: 1;
 }
 
+.bg-video {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  background: #000;
+}
+
+.bg-video.show {
+  opacity: 1;
+}
+
 .bg-overlay {
   position: fixed;
   inset: 0;
@@ -296,6 +313,54 @@ body {
 .link-desc {
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+/* ========== 背景切换条 ========== */
+.bg-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 4.6rem;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem;
+  max-width: 90vw;
+  padding: 0.35rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(15, 20, 35, 0.75);
+  backdrop-filter: blur(12px);
+}
+
+.bg-bar[hidden] {
+  display: none;
+}
+
+.bg-btn {
+  min-width: 36px;
+  height: 32px;
+  padding: 0 0.6rem;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background var(--transition), color var(--transition);
+  font-family: inherit;
+  white-space: nowrap;
+}
+
+.bg-btn:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.bg-btn.active {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.14);
 }
 
 /* ========== 特效切换条 ========== */
@@ -518,6 +583,88 @@ body {
 
 .settings-form {
   margin-bottom: 0.25rem;
+}
+
+.bg-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin-bottom: 0.6rem;
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.bg-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.55rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid transparent;
+  font-size: 0.8rem;
+}
+
+.bg-item.active {
+  border-color: rgba(167, 139, 250, 0.55);
+  background: rgba(167, 139, 250, 0.12);
+}
+
+.bg-item-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bg-item-type {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.bg-item-actions {
+  display: flex;
+  gap: 0.25rem;
+  flex-shrink: 0;
+}
+
+.bg-item-actions button {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.15rem 0.3rem;
+  border-radius: 4px;
+  font-family: inherit;
+}
+
+.bg-item-actions button:hover {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.bg-item-actions .del:hover {
+  color: #f87171;
+}
+
+.bg-add-row {
+  display: flex;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+}
+
+.bg-add-row input,
+.bg-add-row select {
+  flex: 1;
+}
+
+.field-tip {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin: 0.3rem 0 0.2rem;
+  line-height: 1.35;
 }
 
 .upload-area {
