@@ -72,6 +72,10 @@
         <span class="link-title">视频 → MP3</span>
         <span class="link-desc">本地转换，支持常见视频格式</span>
       </button>
+      <button type="button" class="link-box" id="openChat">
+        <span class="link-title">AI 对话</span>
+        <span class="link-desc">商汤日日新 · SenseNova</span>
+      </button>
     </section>
 
     <div class="deco-bottom" aria-hidden="true">
@@ -185,6 +189,37 @@
       </div>
 
       <button type="button" class="btn ghost" id="closeConverter">关闭</button>
+    </div>
+  </div>
+
+  <!-- AI 对话 -->
+  <div class="modal" id="chatModal" hidden>
+    <div class="modal-mask" id="chatMask"></div>
+    <div class="modal-panel glass chat-panel">
+      <div class="chat-header">
+        <h2>AI 对话</h2>
+        <span class="chat-model-tag">SenseNova 6.8 Flash-Lite</span>
+      </div>
+
+      <div class="chat-key-row" id="chatKeyRow">
+        <input type="password" id="chatApiKey" placeholder="粘贴你的 SenseNova API Key（sk-...）" autocomplete="off" />
+        <button type="button" class="btn-text" id="saveChatKey">保存 Key</button>
+      </div>
+      <p class="field-tip chat-key-tip">Key 只存在本机，不会上传到我们的服务器。可在 <a href="https://platform.sensenova.cn" target="_blank" rel="noopener">商汤控制台</a> 创建。</p>
+
+      <div class="chat-messages" id="chatMessages">
+        <div class="chat-bubble system">你好，我是商汤日日新。输入问题开始对话。</div>
+      </div>
+
+      <div class="chat-input-row">
+        <textarea id="chatInput" rows="2" placeholder="输入消息，Enter 发送，Shift+Enter 换行"></textarea>
+        <div class="chat-actions">
+          <button type="button" class="btn-text" id="clearChatBtn">清空</button>
+          <button type="button" class="btn primary" id="sendChatBtn">发送</button>
+        </div>
+      </div>
+
+      <button type="button" class="btn ghost" id="closeChat">关闭</button>
     </div>
   </div>
 
