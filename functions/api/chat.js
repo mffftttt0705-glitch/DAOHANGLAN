@@ -1,13 +1,12 @@
 /**
- * Cloudflare Pages Function · SenseNova 对话代理
- * 解决浏览器直接请求可能遇到的 CORS 问题
+ * Cloudflare Pages Function · 多模型对话代理
+ * 解决浏览器 CORS，支持任意 OpenAI 兼容接口
  *
  * POST /api/chat
- * Body: { apiKey, messages, model?, stream? }
- * 转发到 https://token.sensenova.cn/v1/chat/completions
+ * Body: { apiKey, messages, model?, base?, stream? }
  */
 
-const UPSTREAM = "https://token.sensenova.cn/v1/chat/completions";
+const DEFAULT_BASE = "https://token.sensenova.cn/v1";
 const DEFAULT_MODEL = "sensenova-6.8-flash-lite";
 
 function corsHeaders(extra = {}) {
@@ -34,13 +33,22 @@ export async function onRequestPost({ request }) {
       });
     }
 
+    let base = (body.base || DEFAULT_BASE).replace(/\/$/, "");
+    if (!base.startsWith("https://")) {
+      return new Response(JSON.stringify({ error: "base 必须是 https" }), {
+        status: 400,
+        headers: corsHeaders({ "Content-Type": "application/json" }),
+      });
+    }
+
+    const upstreamUrl = base + "/chat/completions";
     const payload = {
       model: body.model || DEFAULT_MODEL,
       messages: body.messages || [],
       stream: body.stream !== false,
     };
 
-    const upstream = await fetch(UPSTREAM, {
+    const upstream = await fetch(upstreamUrl, {
       method: "POST",
       headers: {
         Authorization: "Bearer " + apiKey,
@@ -49,7 +57,6 @@ export async function onRequestPost({ request }) {
       body: JSON.stringify(payload),
     });
 
-    // 流式原样转发
     if (payload.stream && upstream.body) {
       return new Response(upstream.body, {
         status: upstream.status,
@@ -70,12 +77,9 @@ export async function onRequestPost({ request }) {
       }),
     });
   } catch (e) {
-    return new Response(
-      JSON.stringify({ error: String(e.message || e) }),
-      {
-        status: 500,
-        headers: corsHeaders({ "Content-Type": "application/json" }),
-      }
-    );
+    return new Response(JSON.stringify({ error: String(e.message || e) }), {
+      status: 500,
+      headers: corsHeaders({ "Content-Type": "application/json" }),
+    });
   }
 }
