@@ -853,10 +853,54 @@ convertBtn.addEventListener("click", async () => {
   }
 });
 
-/* ========== AI 对话（商汤日日新 SenseNova） ========== */
-const SENSENOVA_BASE = "https://token.sensenova.cn/v1";
-const SENSENOVA_MODEL = "sensenova-6.8-flash-lite";
-const CHAT_KEY_STORAGE = "sensenova_api_key";
+/* ========== AI 对话（多模型） ========== */
+const AI_PROVIDERS = {
+  sensenova: {
+    name: "商汤日日新",
+    base: "https://token.sensenova.cn/v1",
+    model: "sensenova-6.8-flash-lite",
+    tip: 'Key 在 <a href="https://platform.sensenova.cn" target="_blank" rel="noopener">商汤控制台</a> 创建。免费额度有限，触发限流请稍后再试。',
+    system: "你是商汤日日新（SenseNova）助手，回答简洁、有帮助，使用中文。",
+  },
+  deepseek: {
+    name: "DeepSeek",
+    base: "https://api.deepseek.com",
+    model: "deepseek-chat",
+    tip: 'Key 在 <a href="https://platform.deepseek.com" target="_blank" rel="noopener">DeepSeek 开放平台</a> 创建。',
+    system: "你是 DeepSeek 助手，回答简洁、有帮助，使用中文。",
+  },
+  qwen: {
+    name: "通义千问",
+    base: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "qwen-plus",
+    tip: 'Key 在 <a href="https://dashscope.console.aliyun.com" target="_blank" rel="noopener">阿里云百炼</a> 创建（兼容模式）。',
+    system: "你是通义千问助手，回答简洁、有帮助，使用中文。",
+  },
+  zhipu: {
+    name: "智谱 GLM",
+    base: "https://open.bigmodel.cn/api/paas/v4",
+    model: "glm-4-flash",
+    tip: 'Key 在 <a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a> 创建。',
+    system: "你是智谱 GLM 助手，回答简洁、有帮助，使用中文。",
+  },
+  kimi: {
+    name: "Kimi 月之暗面",
+    base: "https://api.moonshot.cn/v1",
+    model: "moonshot-v1-8k",
+    tip: 'Key 在 <a href="https://platform.moonshot.cn" target="_blank" rel="noopener">月之暗面控制台</a> 创建。',
+    system: "你是 Kimi 助手，回答简洁、有帮助，使用中文。",
+  },
+  openai: {
+    name: "OpenAI 兼容",
+    base: "https://api.openai.com/v1",
+    model: "gpt-4o-mini",
+    tip: "可填 OpenAI 或任意兼容接口的 Key。如需自定义 Base URL，可在控制台改代码。",
+    system: "You are a helpful assistant. 请用中文回答。",
+  },
+};
+
+const CHAT_PROVIDER_KEY = "ai_chat_provider";
+const CHAT_KEYS_STORAGE = "ai_chat_keys_v1"; // { providerId: apiKey }
 
 const openChatBtn = document.getElementById("openChat");
 const chatModal = document.getElementById("chatModal");
@@ -868,28 +912,74 @@ const sendChatBtn = document.getElementById("sendChatBtn");
 const clearChatBtn = document.getElementById("clearChatBtn");
 const chatApiKeyInput = document.getElementById("chatApiKey");
 const saveChatKeyBtn = document.getElementById("saveChatKey");
+const chatModelSelect = document.getElementById("chatModelSelect");
+const chatKeyTip = document.getElementById("chatKeyTip");
 
 /** @type {{role: string, content: string}[]} */
 let chatHistory = [];
 let chatBusy = false;
 
+function loadChatKeys() {
+  try {
+    return JSON.parse(localStorage.getItem(CHAT_KEYS_STORAGE) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveChatKeys(map) {
+  localStorage.setItem(CHAT_KEYS_STORAGE, JSON.stringify(map));
+}
+
+function getCurrentProviderId() {
+  return chatModelSelect.value || localStorage.getItem(CHAT_PROVIDER_KEY) || "sensenova";
+}
+
+function getProvider() {
+  return AI_PROVIDERS[getCurrentProviderId()] || AI_PROVIDERS.sensenova;
+}
+
 function getChatApiKey() {
-  return (localStorage.getItem(CHAT_KEY_STORAGE) || "").trim();
+  const map = loadChatKeys();
+  return (map[getCurrentProviderId()] || "").trim();
+}
+
+function applyProviderUI() {
+  const id = getCurrentProviderId();
+  localStorage.setItem(CHAT_PROVIDER_KEY, id);
+  const p = getProvider();
+  chatApiKeyInput.value = getChatApiKey();
+  chatApiKeyInput.placeholder = "粘贴 " + p.name + " 的 API Key";
+  chatKeyTip.innerHTML = p.tip + " Key 只存在本机。";
 }
 
 function openChatModal() {
-  chatApiKeyInput.value = getChatApiKey();
+  const saved = localStorage.getItem(CHAT_PROVIDER_KEY);
+  if (saved && AI_PROVIDERS[saved]) chatModelSelect.value = saved;
+  applyProviderUI();
   chatModal.hidden = false;
+  document.body.style.overflow = "hidden";
   chatInput.focus();
 }
 
 function closeChatModal() {
   chatModal.hidden = true;
+  document.body.style.overflow = "";
 }
 
 openChatBtn.addEventListener("click", openChatModal);
 closeChatBtn.addEventListener("click", closeChatModal);
 chatMask.addEventListener("click", closeChatModal);
+
+chatModelSelect.addEventListener("change", () => {
+  applyProviderUI();
+  // 切换模型时清空对话，避免上下文混乱
+  chatHistory = [];
+  chatMessages.innerHTML =
+    '<div class="chat-bubble system">已切换到 ' +
+    getProvider().name +
+    "。填入对应 Key 后开始对话。</div>";
+});
 
 saveChatKeyBtn.addEventListener("click", () => {
   const key = chatApiKeyInput.value.trim();
@@ -897,8 +987,10 @@ saveChatKeyBtn.addEventListener("click", () => {
     alert("请先粘贴 API Key");
     return;
   }
-  localStorage.setItem(CHAT_KEY_STORAGE, key);
-  alert("API Key 已保存到本机");
+  const map = loadChatKeys();
+  map[getCurrentProviderId()] = key;
+  saveChatKeys(map);
+  alert(getProvider().name + " 的 API Key 已保存到本机");
 });
 
 function appendBubble(role, text, extraClass) {
@@ -908,6 +1000,26 @@ function appendBubble(role, text, extraClass) {
   chatMessages.appendChild(div);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   return div;
+}
+
+function friendlyError(raw) {
+  const tip = String(raw || "");
+  if (/tpm|rpm|rate.?limit|exceeds.*limit|429/i.test(tip)) {
+    return "请求过于频繁或额度不足（限流）。请等待 30～60 秒后再试，或换一个模型 / 明天再用。";
+  }
+  if (/invalid.?api.?key|incorrect.?api.?key|401|unauthorized|鉴权|密钥/i.test(tip)) {
+    return "API Key 无效或已过期，请检查后重新保存。";
+  }
+  if (/insufficient|余额|quota|billing/i.test(tip)) {
+    return "账户余额不足或配额已用完，请到对应平台充值或换模型。";
+  }
+  if (/Failed to fetch|NetworkError|CORS/i.test(tip)) {
+    return "网络或跨域失败。请确认已部署代理接口，或检查网络。";
+  }
+  if (/model.?not.?found|不存在/i.test(tip)) {
+    return "模型名称不可用，请换一个模型试试。";
+  }
+  return tip.length > 180 ? tip.slice(0, 180) + "…" : tip;
 }
 
 clearChatBtn.addEventListener("click", () => {
@@ -922,15 +1034,17 @@ async function sendChatMessage() {
   const text = chatInput.value.trim();
   if (!text) return;
 
+  const provider = getProvider();
   let apiKey = getChatApiKey() || chatApiKeyInput.value.trim();
   if (!apiKey) {
-    alert("请先填写并保存 SenseNova API Key");
+    alert("请先填写并保存 " + provider.name + " 的 API Key");
     chatApiKeyInput.focus();
     return;
   }
-  // 顺手保存一次
   if (chatApiKeyInput.value.trim()) {
-    localStorage.setItem(CHAT_KEY_STORAGE, chatApiKeyInput.value.trim());
+    const map = loadChatKeys();
+    map[getCurrentProviderId()] = chatApiKeyInput.value.trim();
+    saveChatKeys(map);
     apiKey = chatApiKeyInput.value.trim();
   }
 
@@ -943,28 +1057,27 @@ async function sendChatMessage() {
   sendChatBtn.disabled = true;
 
   const messages = [
-    {
-      role: "system",
-      content: "你是商汤日日新（SenseNova）助手，回答简洁、有帮助，使用中文。",
-    },
+    { role: "system", content: provider.system },
     ...chatHistory,
   ];
 
+  const endpoint = provider.base.replace(/\/$/, "") + "/chat/completions";
+  const payload = {
+    model: provider.model,
+    messages,
+    stream: true,
+  };
+
   try {
-    // 优先直连；失败（常见 CORS）则走本站 /api/chat 代理
     let res;
     try {
-      res = await fetch(SENSENOVA_BASE + "/chat/completions", {
+      res = await fetch(endpoint, {
         method: "POST",
         headers: {
           Authorization: "Bearer " + apiKey,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model: SENSENOVA_MODEL,
-          messages,
-          stream: true,
-        }),
+        body: JSON.stringify(payload),
       });
     } catch (directErr) {
       console.warn("直连失败，改用代理", directErr);
@@ -973,7 +1086,8 @@ async function sendChatMessage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           apiKey,
-          model: SENSENOVA_MODEL,
+          base: provider.base,
+          model: provider.model,
           messages,
           stream: true,
         }),
@@ -996,7 +1110,6 @@ async function sendChatMessage() {
       throw new Error(errText);
     }
 
-    // 流式 SSE
     const reader = res.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let full = "";
@@ -1040,13 +1153,7 @@ async function sendChatMessage() {
     console.error(e);
     assistantEl.classList.remove("streaming");
     assistantEl.className = "chat-bubble error";
-    let tip = String(e.message || e);
-    if (/Failed to fetch|NetworkError|CORS/i.test(tip)) {
-      tip =
-        "网络失败。请确认已部署 functions/api/chat.js，并检查 API Key。\n" +
-        tip;
-    }
-    assistantEl.textContent = "请求失败：" + tip;
+    assistantEl.textContent = "请求失败：" + friendlyError(e.message || e);
   } finally {
     chatBusy = false;
     sendChatBtn.disabled = false;
