@@ -146,7 +146,9 @@ function applyBackground(data) {
   customBg.classList.remove("show");
   bgVideo.classList.remove("show");
   bgVideo.removeAttribute("src");
-  bgVideo.load();
+  try {
+    bgVideo.load();
+  } catch (_) {}
 
   if (!cur || !cur.url) return;
 
@@ -155,7 +157,8 @@ function applyBackground(data) {
     bgVideo.classList.add("show");
     bgVideo.play().catch(() => {});
   } else {
-    customBg.style.backgroundImage = `url("${cur.url}")`;
+    // JSON.stringify 正确转义 dataURL / 特殊字符，避免 CSS url() 解析失败
+    customBg.style.backgroundImage = "url(" + JSON.stringify(cur.url) + ")";
     customBg.classList.add("show");
   }
 }
@@ -847,6 +850,216 @@ convertBtn.addEventListener("click", async () => {
     alert(tip);
   } finally {
     convertBtn.disabled = false;
+  }
+});
+
+/* ========== AI 对话（商汤日日新 SenseNova） ========== */
+const SENSENOVA_BASE = "https://token.sensenova.cn/v1";
+const SENSENOVA_MODEL = "sensenova-6.8-flash-lite";
+const CHAT_KEY_STORAGE = "sensenova_api_key";
+
+const openChatBtn = document.getElementById("openChat");
+const chatModal = document.getElementById("chatModal");
+const chatMask = document.getElementById("chatMask");
+const closeChatBtn = document.getElementById("closeChat");
+const chatMessages = document.getElementById("chatMessages");
+const chatInput = document.getElementById("chatInput");
+const sendChatBtn = document.getElementById("sendChatBtn");
+const clearChatBtn = document.getElementById("clearChatBtn");
+const chatApiKeyInput = document.getElementById("chatApiKey");
+const saveChatKeyBtn = document.getElementById("saveChatKey");
+
+/** @type {{role: string, content: string}[]} */
+let chatHistory = [];
+let chatBusy = false;
+
+function getChatApiKey() {
+  return (localStorage.getItem(CHAT_KEY_STORAGE) || "").trim();
+}
+
+function openChatModal() {
+  chatApiKeyInput.value = getChatApiKey();
+  chatModal.hidden = false;
+  chatInput.focus();
+}
+
+function closeChatModal() {
+  chatModal.hidden = true;
+}
+
+openChatBtn.addEventListener("click", openChatModal);
+closeChatBtn.addEventListener("click", closeChatModal);
+chatMask.addEventListener("click", closeChatModal);
+
+saveChatKeyBtn.addEventListener("click", () => {
+  const key = chatApiKeyInput.value.trim();
+  if (!key) {
+    alert("请先粘贴 API Key");
+    return;
+  }
+  localStorage.setItem(CHAT_KEY_STORAGE, key);
+  alert("API Key 已保存到本机");
+});
+
+function appendBubble(role, text, extraClass) {
+  const div = document.createElement("div");
+  div.className = "chat-bubble " + role + (extraClass ? " " + extraClass : "");
+  div.textContent = text;
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  return div;
+}
+
+clearChatBtn.addEventListener("click", () => {
+  if (chatBusy) return;
+  chatHistory = [];
+  chatMessages.innerHTML =
+    '<div class="chat-bubble system">对话已清空。输入问题开始新对话。</div>';
+});
+
+async function sendChatMessage() {
+  if (chatBusy) return;
+  const text = chatInput.value.trim();
+  if (!text) return;
+
+  let apiKey = getChatApiKey() || chatApiKeyInput.value.trim();
+  if (!apiKey) {
+    alert("请先填写并保存 SenseNova API Key");
+    chatApiKeyInput.focus();
+    return;
+  }
+  // 顺手保存一次
+  if (chatApiKeyInput.value.trim()) {
+    localStorage.setItem(CHAT_KEY_STORAGE, chatApiKeyInput.value.trim());
+    apiKey = chatApiKeyInput.value.trim();
+  }
+
+  chatInput.value = "";
+  appendBubble("user", text);
+  chatHistory.push({ role: "user", content: text });
+
+  const assistantEl = appendBubble("assistant", "", "streaming");
+  chatBusy = true;
+  sendChatBtn.disabled = true;
+
+  const messages = [
+    {
+      role: "system",
+      content: "你是商汤日日新（SenseNova）助手，回答简洁、有帮助，使用中文。",
+    },
+    ...chatHistory,
+  ];
+
+  try {
+    // 优先直连；失败（常见 CORS）则走本站 /api/chat 代理
+    let res;
+    try {
+      res = await fetch(SENSENOVA_BASE + "/chat/completions", {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer " + apiKey,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: SENSENOVA_MODEL,
+          messages,
+          stream: true,
+        }),
+      });
+    } catch (directErr) {
+      console.warn("直连失败，改用代理", directErr);
+      res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          apiKey,
+          model: SENSENOVA_MODEL,
+          messages,
+          stream: true,
+        }),
+      });
+    }
+
+    if (!res.ok) {
+      let errText = "HTTP " + res.status;
+      try {
+        const errJson = await res.json();
+        errText =
+          (errJson.error && (errJson.error.message || errJson.error)) ||
+          errJson.message ||
+          JSON.stringify(errJson);
+      } catch (_) {
+        try {
+          errText = await res.text();
+        } catch (__) {}
+      }
+      throw new Error(errText);
+    }
+
+    // 流式 SSE
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let full = "";
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data:")) continue;
+        const data = trimmed.slice(5).trim();
+        if (data === "[DONE]") continue;
+        try {
+          const json = JSON.parse(data);
+          const delta =
+            json.choices &&
+            json.choices[0] &&
+            json.choices[0].delta &&
+            json.choices[0].delta.content;
+          if (delta) {
+            full += delta;
+            assistantEl.textContent = full;
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+          }
+        } catch (_) {}
+      }
+    }
+
+    assistantEl.classList.remove("streaming");
+    if (!full) {
+      assistantEl.textContent = "（模型没有返回内容）";
+    } else {
+      chatHistory.push({ role: "assistant", content: full });
+    }
+  } catch (e) {
+    console.error(e);
+    assistantEl.classList.remove("streaming");
+    assistantEl.className = "chat-bubble error";
+    let tip = String(e.message || e);
+    if (/Failed to fetch|NetworkError|CORS/i.test(tip)) {
+      tip =
+        "网络失败。请确认已部署 functions/api/chat.js，并检查 API Key。\n" +
+        tip;
+    }
+    assistantEl.textContent = "请求失败：" + tip;
+  } finally {
+    chatBusy = false;
+    sendChatBtn.disabled = false;
+    chatInput.focus();
+  }
+}
+
+sendChatBtn.addEventListener("click", sendChatMessage);
+
+chatInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendChatMessage();
   }
 });
 
