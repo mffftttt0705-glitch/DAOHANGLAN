@@ -210,7 +210,18 @@
       <p class="field-tip chat-key-tip" id="chatKeyTip">Key 只存在本机。切换模型后请填入对应平台的 Key。</p>
 
       <div class="chat-messages" id="chatMessages">
-        <div class="chat-bubble system">选择模型并填入 API Key 后开始对话。</div>
+        <div class="chat-bubble system">选择模型并填入 API Key 后开始对话。支持发图、生成图片、思考过程展示。</div>
+      </div>
+
+      <div class="chat-attach-preview" id="chatAttachPreview" hidden></div>
+
+      <div class="chat-toolbar">
+        <button type="button" class="chat-tool-btn" id="chatPickImage" title="发送图片（识图）">🖼 图片</button>
+        <button type="button" class="chat-tool-btn" id="chatPickFile" title="发送文件">📎 文件</button>
+        <button type="button" class="chat-tool-btn" id="chatGenImage" title="AI 生成图片">🎨 生图</button>
+        <button type="button" class="chat-tool-btn" id="chatGenVideo" title="AI 生成视频">🎬 生视频</button>
+        <input type="file" id="chatImageInput" accept="image/*" hidden />
+        <input type="file" id="chatFileInput" accept=".txt,.md,.json,.csv,.log,.js,.ts,.py,.html,.css,.xml" hidden />
       </div>
 
       <div class="chat-input-row">
