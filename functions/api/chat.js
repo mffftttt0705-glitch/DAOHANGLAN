@@ -1,9 +1,7 @@
 /**
- * Cloudflare Pages Function · 多模型对话代理
- * 解决浏览器 CORS，支持任意 OpenAI 兼容接口
- *
+ * Cloudflare Pages Function · 多模型对话 / 生图代理
  * POST /api/chat
- * Body: { apiKey, messages, model?, base?, stream? }
+ * Body: { apiKey, base?, path?, model?, messages?, stream?, prompt?, n?, size? }
  */
 
 const DEFAULT_BASE = "https://token.sensenova.cn/v1";
@@ -41,12 +39,33 @@ export async function onRequestPost({ request }) {
       });
     }
 
-    const upstreamUrl = base + "/chat/completions";
-    const payload = {
-      model: body.model || DEFAULT_MODEL,
-      messages: body.messages || [],
-      stream: body.stream !== false,
-    };
+    let path = body.path || "/chat/completions";
+    if (!path.startsWith("/")) path = "/" + path;
+    // 仅允许常见 OpenAI 兼容路径，防止 SSRF 滥用
+    const allowed = ["/chat/completions", "/images/generations"];
+    if (!allowed.includes(path)) {
+      return new Response(JSON.stringify({ error: "不支持的 path" }), {
+        status: 400,
+        headers: corsHeaders({ "Content-Type": "application/json" }),
+      });
+    }
+
+    const upstreamUrl = base + path;
+    let payload;
+    if (path === "/images/generations") {
+      payload = {
+        model: body.model || "dall-e-3",
+        prompt: body.prompt || "",
+        n: body.n || 1,
+        size: body.size || "1024x1024",
+      };
+    } else {
+      payload = {
+        model: body.model || DEFAULT_MODEL,
+        messages: body.messages || [],
+        stream: body.stream !== false,
+      };
+    }
 
     const upstream = await fetch(upstreamUrl, {
       method: "POST",
