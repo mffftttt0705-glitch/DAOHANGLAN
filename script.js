@@ -854,48 +854,66 @@ convertBtn.addEventListener("click", async () => {
 });
 
 /* ========== AI 对话（多模型） ========== */
+const THINK_SYSTEM =
+  "你是智能助手，请使用中文。复杂问题时先在 <think> 与 </think> 标签内写出简要思考过程，再给出最终回答；简单问候可直接回答。";
+
 const AI_PROVIDERS = {
   sensenova: {
     name: "商汤日日新",
     base: "https://token.sensenova.cn/v1",
     model: "sensenova-6.8-flash-lite",
     tip: 'Key 在 <a href="https://platform.sensenova.cn" target="_blank" rel="noopener">商汤控制台</a> 创建。免费额度有限，触发限流请稍后再试。',
-    system: "你是商汤日日新（SenseNova）助手，回答简洁、有帮助，使用中文。",
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: false,
   },
   deepseek: {
     name: "DeepSeek",
     base: "https://api.deepseek.com",
     model: "deepseek-chat",
     tip: 'Key 在 <a href="https://platform.deepseek.com" target="_blank" rel="noopener">DeepSeek 开放平台</a> 创建。',
-    system: "你是 DeepSeek 助手，回答简洁、有帮助，使用中文。",
+    system: THINK_SYSTEM,
+    vision: false,
+    imageGen: false,
   },
   qwen: {
     name: "通义千问",
     base: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     model: "qwen-plus",
-    tip: 'Key 在 <a href="https://dashscope.console.aliyun.com" target="_blank" rel="noopener">阿里云百炼</a> 创建（兼容模式）。',
-    system: "你是通义千问助手，回答简洁、有帮助，使用中文。",
+    tip: 'Key 在 <a href="https://dashscope.console.aliyun.com" target="_blank" rel="noopener">阿里云百炼</a> 创建（兼容模式）。生图可用 qwen 图像模型（需平台开通）。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: true,
+    imageModel: "wanx-v1",
   },
   zhipu: {
     name: "智谱 GLM",
     base: "https://open.bigmodel.cn/api/paas/v4",
     model: "glm-4-flash",
-    tip: 'Key 在 <a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a> 创建。',
-    system: "你是智谱 GLM 助手，回答简洁、有帮助，使用中文。",
+    tip: 'Key 在 <a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a> 创建。支持识图与部分生图能力。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: true,
+    imageModel: "cogview-3-flash",
   },
   kimi: {
     name: "Kimi 月之暗面",
     base: "https://api.moonshot.cn/v1",
     model: "moonshot-v1-8k",
     tip: 'Key 在 <a href="https://platform.moonshot.cn" target="_blank" rel="noopener">月之暗面控制台</a> 创建。',
-    system: "你是 Kimi 助手，回答简洁、有帮助，使用中文。",
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: false,
   },
   openai: {
     name: "OpenAI 兼容",
     base: "https://api.openai.com/v1",
     model: "gpt-4o-mini",
-    tip: "可填 OpenAI 或任意兼容接口的 Key。如需自定义 Base URL，可在控制台改代码。",
-    system: "You are a helpful assistant. 请用中文回答。",
+    tip: "可填 OpenAI 或任意兼容接口的 Key。支持识图与 DALL·E 生图（需对应模型权限）。",
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: true,
+    imageModel: "dall-e-3",
   },
 };
 
@@ -993,13 +1011,163 @@ saveChatKeyBtn.addEventListener("click", () => {
   alert(getProvider().name + " 的 API Key 已保存到本机");
 });
 
-function appendBubble(role, text, extraClass) {
+/** 待发送附件：{ type:'image'|'file', name, dataUrl?, text?, mime? } */
+let pendingAttach = null;
+
+const chatAttachPreview = document.getElementById("chatAttachPreview");
+const chatPickImage = document.getElementById("chatPickImage");
+const chatPickFile = document.getElementById("chatPickFile");
+const chatGenImage = document.getElementById("chatGenImage");
+const chatGenVideo = document.getElementById("chatGenVideo");
+const chatImageInput = document.getElementById("chatImageInput");
+const chatFileInput = document.getElementById("chatFileInput");
+
+function fileToDataURLLimited(file, maxBytes) {
+  return new Promise((resolve, reject) => {
+    if (file.size > maxBytes) {
+      reject(new Error("文件过大，请压缩到 " + Math.round(maxBytes / 1024) + "KB 以内"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function fileToText(file) {
+  return new Promise((resolve, reject) => {
+    if (file.size > 200 * 1024) {
+      reject(new Error("文本文件请控制在 200KB 以内"));
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsText(file, "utf-8");
+  });
+}
+
+function renderAttachPreview() {
+  if (!pendingAttach) {
+    chatAttachPreview.hidden = true;
+    chatAttachPreview.innerHTML = "";
+    return;
+  }
+  chatAttachPreview.hidden = false;
+  if (pendingAttach.type === "image") {
+    chatAttachPreview.innerHTML =
+      '<div class="attach-chip"><img src="' +
+      pendingAttach.dataUrl +
+      '" alt=""/><span>' +
+      escapeHtml(pendingAttach.name) +
+      '</span><button type="button" id="clearAttach">✕</button></div>';
+  } else {
+    chatAttachPreview.innerHTML =
+      '<div class="attach-chip"><span>📄 ' +
+      escapeHtml(pendingAttach.name) +
+      '</span><button type="button" id="clearAttach">✕</button></div>';
+  }
+  document.getElementById("clearAttach").onclick = () => {
+    pendingAttach = null;
+    renderAttachPreview();
+  };
+}
+
+chatPickImage.addEventListener("click", () => chatImageInput.click());
+chatPickFile.addEventListener("click", () => chatFileInput.click());
+
+chatImageInput.addEventListener("change", async () => {
+  const file = chatImageInput.files[0];
+  chatImageInput.value = "";
+  if (!file) return;
+  try {
+    const dataUrl = await fileToDataURLLimited(file, 1.5 * 1024 * 1024);
+    pendingAttach = { type: "image", name: file.name, dataUrl, mime: file.type };
+    renderAttachPreview();
+  } catch (e) {
+    alert(e.message || "图片读取失败");
+  }
+});
+
+chatFileInput.addEventListener("change", async () => {
+  const file = chatFileInput.files[0];
+  chatFileInput.value = "";
+  if (!file) return;
+  try {
+    const text = await fileToText(file);
+    pendingAttach = { type: "file", name: file.name, text };
+    renderAttachPreview();
+  } catch (e) {
+    alert(e.message || "文件读取失败");
+  }
+});
+
+function appendBubble(role, extraClass) {
   const div = document.createElement("div");
   div.className = "chat-bubble " + role + (extraClass ? " " + extraClass : "");
-  div.textContent = text;
   chatMessages.appendChild(div);
   chatMessages.scrollTop = chatMessages.scrollHeight;
   return div;
+}
+
+function setUserBubble(el, text, attach) {
+  el.textContent = text || "";
+  if (attach && attach.type === "image" && attach.dataUrl) {
+    const img = document.createElement("img");
+    img.className = "msg-media";
+    img.src = attach.dataUrl;
+    img.alt = attach.name || "图片";
+    el.appendChild(img);
+  } else if (attach && attach.type === "file") {
+    const f = document.createElement("div");
+    f.className = "msg-file";
+    f.textContent = "📄 " + (attach.name || "文件");
+    el.appendChild(f);
+  }
+}
+
+function parseThinkAnswer(raw) {
+  const s = String(raw || "");
+  const m = s.match(/<think>([\s\S]*?)<\/think>/i);
+  if (m) {
+    return {
+      think: m[1].trim(),
+      answer: s.replace(/<think>[\s\S]*?<\/think>/i, "").trim(),
+    };
+  }
+  const m2 = s.match(/<reasoning>([\s\S]*?)<\/reasoning>/i);
+  if (m2) {
+    return {
+      think: m2[1].trim(),
+      answer: s.replace(/<reasoning>[\s\S]*?<\/reasoning>/i, "").trim(),
+    };
+  }
+  return { think: "", answer: s };
+}
+
+function renderAssistantBubble(el, fullText, reasoningExtra) {
+  const parsed = parseThinkAnswer(fullText);
+  const think = ((reasoningExtra || "") + (parsed.think ? (reasoningExtra ? "\n" : "") + parsed.think : "")).trim();
+  el.innerHTML = "";
+  if (think) {
+    const details = document.createElement("details");
+    details.className = "thinking-block";
+    details.open = !parsed.answer;
+    const sum = document.createElement("summary");
+    sum.textContent = parsed.answer ? "思考过程" : "思考中…";
+    const body = document.createElement("div");
+    body.className = "thinking-content";
+    body.textContent = think;
+    details.appendChild(sum);
+    details.appendChild(body);
+    el.appendChild(details);
+  }
+  const ans = document.createElement("div");
+  ans.className = "answer-body";
+  ans.textContent = parsed.answer || (think ? "" : fullText || "");
+  el.appendChild(ans);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
 function friendlyError(raw) {
@@ -1019,27 +1187,19 @@ function friendlyError(raw) {
   if (/model.?not.?found|不存在/i.test(tip)) {
     return "模型名称不可用，请换一个模型试试。";
   }
+  if (/content.?policy|safety|敏感/i.test(tip)) {
+    return "内容被安全策略拦截，请修改描述后重试。";
+  }
   return tip.length > 180 ? tip.slice(0, 180) + "…" : tip;
 }
 
-clearChatBtn.addEventListener("click", () => {
-  if (chatBusy) return;
-  chatHistory = [];
-  chatMessages.innerHTML =
-    '<div class="chat-bubble system">对话已清空。输入问题开始新对话。</div>';
-});
-
-async function sendChatMessage() {
-  if (chatBusy) return;
-  const text = chatInput.value.trim();
-  if (!text) return;
-
+function ensureApiKey() {
   const provider = getProvider();
   let apiKey = getChatApiKey() || chatApiKeyInput.value.trim();
   if (!apiKey) {
     alert("请先填写并保存 " + provider.name + " 的 API Key");
     chatApiKeyInput.focus();
-    return;
+    return null;
   }
   if (chatApiKeyInput.value.trim()) {
     const map = loadChatKeys();
@@ -1047,52 +1207,105 @@ async function sendChatMessage() {
     saveChatKeys(map);
     apiKey = chatApiKeyInput.value.trim();
   }
+  return apiKey;
+}
+
+async function apiFetch(pathSuffix, bodyObj, apiKey, provider) {
+  const base = provider.base.replace(/\/$/, "");
+  const endpoint = base + pathSuffix;
+  try {
+    return await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        Authorization: "Bearer " + apiKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(bodyObj),
+    });
+  } catch (directErr) {
+    console.warn("直连失败，改用代理", directErr);
+    return fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        apiKey,
+        base: provider.base,
+        path: pathSuffix,
+        model: bodyObj.model,
+        messages: bodyObj.messages,
+        stream: !!bodyObj.stream,
+        prompt: bodyObj.prompt,
+        n: bodyObj.n,
+        size: bodyObj.size,
+      }),
+    });
+  }
+}
+
+clearChatBtn.addEventListener("click", () => {
+  if (chatBusy) return;
+  chatHistory = [];
+  pendingAttach = null;
+  renderAttachPreview();
+  chatMessages.innerHTML =
+    '<div class="chat-bubble system">对话已清空。输入问题开始新对话。</div>';
+});
+
+async function sendChatMessage() {
+  if (chatBusy) return;
+  const text = chatInput.value.trim();
+  const attach = pendingAttach;
+  if (!text && !attach) return;
+
+  const provider = getProvider();
+  const apiKey = ensureApiKey();
+  if (!apiKey) return;
+
+  if (attach && attach.type === "image" && provider.vision === false) {
+    alert(provider.name + " 当前配置可能不支持识图，可改用通义 / 智谱 / OpenAI / Kimi 再试。");
+  }
 
   chatInput.value = "";
-  appendBubble("user", text);
-  chatHistory.push({ role: "user", content: text });
+  pendingAttach = null;
+  renderAttachPreview();
 
-  const assistantEl = appendBubble("assistant", "", "streaming");
+  const userEl = appendBubble("user");
+  let displayText = text;
+  if (attach && attach.type === "file") {
+    displayText = (text ? text + "\n\n" : "") + "【已附文件：" + attach.name + "】";
+  } else if (attach && attach.type === "image" && !text) {
+    displayText = "请描述这张图片";
+  }
+  setUserBubble(userEl, displayText, attach);
+
+  let userContent;
+  if (attach && attach.type === "image" && attach.dataUrl) {
+    userContent = [
+      { type: "text", text: text || "请详细描述这张图片的内容。" },
+      { type: "image_url", image_url: { url: attach.dataUrl } },
+    ];
+  } else if (attach && attach.type === "file") {
+    userContent =
+      (text ? text + "\n\n" : "") +
+      "以下是用户上传的文件「" +
+      attach.name +
+      "」内容：\n```\n" +
+      attach.text +
+      "\n```";
+  } else {
+    userContent = text;
+  }
+  chatHistory.push({ role: "user", content: userContent });
+
+  const assistantEl = appendBubble("assistant", "streaming");
   chatBusy = true;
   sendChatBtn.disabled = true;
 
-  const messages = [
-    { role: "system", content: provider.system },
-    ...chatHistory,
-  ];
-
-  const endpoint = provider.base.replace(/\/$/, "") + "/chat/completions";
-  const payload = {
-    model: provider.model,
-    messages,
-    stream: true,
-  };
+  const messages = [{ role: "system", content: provider.system }, ...chatHistory];
+  const payload = { model: provider.model, messages, stream: true };
 
   try {
-    let res;
-    try {
-      res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          Authorization: "Bearer " + apiKey,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
-    } catch (directErr) {
-      console.warn("直连失败，改用代理", directErr);
-      res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          apiKey,
-          base: provider.base,
-          model: provider.model,
-          messages,
-          stream: true,
-        }),
-      });
-    }
+    const res = await apiFetch("/chat/completions", payload, apiKey, provider);
 
     if (!res.ok) {
       let errText = "HTTP " + res.status;
@@ -1113,6 +1326,7 @@ async function sendChatMessage() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let full = "";
+    let reasoning = "";
     let buffer = "";
 
     while (true) {
@@ -1129,25 +1343,26 @@ async function sendChatMessage() {
         if (data === "[DONE]") continue;
         try {
           const json = JSON.parse(data);
-          const delta =
-            json.choices &&
-            json.choices[0] &&
-            json.choices[0].delta &&
-            json.choices[0].delta.content;
-          if (delta) {
-            full += delta;
-            assistantEl.textContent = full;
-            chatMessages.scrollTop = chatMessages.scrollHeight;
-          }
+          const delta = json.choices && json.choices[0] && json.choices[0].delta;
+          if (!delta) continue;
+          if (delta.reasoning_content) reasoning += delta.reasoning_content;
+          if (delta.reasoning) reasoning += delta.reasoning;
+          if (delta.content) full += delta.content;
+          renderAssistantBubble(assistantEl, full, reasoning);
         } catch (_) {}
       }
     }
 
     assistantEl.classList.remove("streaming");
-    if (!full) {
+    const finalText = full || "";
+    renderAssistantBubble(assistantEl, finalText, reasoning);
+    const det = assistantEl.querySelector("details.thinking-block");
+    if (det && finalText) det.open = false;
+
+    if (!finalText && !reasoning) {
       assistantEl.textContent = "（模型没有返回内容）";
     } else {
-      chatHistory.push({ role: "assistant", content: full });
+      chatHistory.push({ role: "assistant", content: finalText || reasoning });
     }
   } catch (e) {
     console.error(e);
@@ -1161,6 +1376,155 @@ async function sendChatMessage() {
   }
 }
 
+async function generateImage() {
+  if (chatBusy) return;
+  const prompt = chatInput.value.trim() || window.prompt("请输入生图描述（中文即可）");
+  if (!prompt) return;
+
+  const provider = getProvider();
+  const apiKey = ensureApiKey();
+  if (!apiKey) return;
+
+  chatInput.value = "";
+  const userEl = appendBubble("user");
+  userEl.textContent = "🎨 生成图片：" + prompt;
+  chatHistory.push({ role: "user", content: "请生成图片：" + prompt });
+
+  const assistantEl = appendBubble("assistant", "streaming");
+  assistantEl.textContent = "正在生成图片…";
+  chatBusy = true;
+  sendChatBtn.disabled = true;
+
+  try {
+    if (!provider.imageGen) {
+      throw new Error(
+        provider.name +
+          " 当前未配置生图接口。可切换到「OpenAI 兼容 / 智谱 / 通义」再试。"
+      );
+    }
+
+    const imageModel = provider.imageModel || "dall-e-3";
+    let body = { model: imageModel, prompt, n: 1 };
+    if (getCurrentProviderId() === "qwen") {
+      body.size = "1024*1024";
+    } else {
+      body.size = "1024x1024";
+    }
+
+    const res = await apiFetch("/images/generations", body, apiKey, provider);
+
+    if (!res.ok) {
+      let errText = "HTTP " + res.status;
+      try {
+        const j = await res.json();
+        errText = (j.error && (j.error.message || j.error)) || j.message || JSON.stringify(j);
+      } catch (_) {
+        try {
+          errText = await res.text();
+        } catch (__) {}
+      }
+      throw new Error(errText);
+    }
+
+    const data = await res.json();
+    const item = data.data && data.data[0];
+    const url = item && (item.url || item.b64_json || item.image);
+
+    assistantEl.classList.remove("streaming");
+    assistantEl.innerHTML = "";
+    const tip = document.createElement("div");
+    tip.className = "answer-body";
+    tip.textContent = "已生成图片：";
+    assistantEl.appendChild(tip);
+
+    if (url) {
+      const img = document.createElement("img");
+      img.className = "msg-media";
+      img.alt = prompt;
+      img.src =
+        String(url).startsWith("http") || String(url).startsWith("data:")
+          ? url
+          : "data:image/png;base64," + url;
+      assistantEl.appendChild(img);
+      chatHistory.push({ role: "assistant", content: "（已生成图片：" + prompt + "）" });
+    } else {
+      tip.textContent =
+        "生图接口已返回，但未解析到图片地址：\n" + JSON.stringify(data).slice(0, 400);
+    }
+  } catch (e) {
+    console.error(e);
+    assistantEl.classList.remove("streaming");
+    assistantEl.className = "chat-bubble error";
+    assistantEl.textContent = "生图失败：" + friendlyError(e.message || e);
+  } finally {
+    chatBusy = false;
+    sendChatBtn.disabled = false;
+    chatInput.focus();
+  }
+}
+
+async function generateVideo() {
+  if (chatBusy) return;
+  const prompt = chatInput.value.trim() || window.prompt("请输入视频描述");
+  if (!prompt) return;
+
+  const provider = getProvider();
+  const apiKey = ensureApiKey();
+  if (!apiKey) return;
+
+  chatInput.value = "";
+  const userEl = appendBubble("user");
+  userEl.textContent = "🎬 生成视频：" + prompt;
+
+  const assistantEl = appendBubble("assistant");
+  assistantEl.innerHTML =
+    '<div class="answer-body">视频文件生成对 API 要求很高，多数对话 Key 无法直接出片。\n正在为你生成可复制到「可灵 / 即梦 / Runway」的分镜与提示词…</div>';
+
+  chatBusy = true;
+  sendChatBtn.disabled = true;
+
+  try {
+    const messages = [
+      {
+        role: "system",
+        content:
+          "你是视频导演助手。输出：1) 约15秒分镜 2) 中英文视频提示词 3) 镜头与配乐建议。使用中文。",
+      },
+      { role: "user", content: "主题：" + prompt },
+    ];
+    const res = await apiFetch(
+      "/chat/completions",
+      { model: provider.model, messages, stream: false },
+      apiKey,
+      provider
+    );
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    const data = await res.json();
+    const content =
+      (data.choices &&
+        data.choices[0] &&
+        data.choices[0].message &&
+        data.choices[0].message.content) ||
+      "未能生成分镜。";
+    assistantEl.innerHTML = "";
+    const body = document.createElement("div");
+    body.className = "answer-body";
+    body.textContent =
+      "【说明】当前接口一般不直接渲染视频文件。以下内容可复制到专业视频生成平台：\n\n" + content;
+    assistantEl.appendChild(body);
+    chatHistory.push({ role: "user", content: "生成视频：" + prompt });
+    chatHistory.push({ role: "assistant", content: content });
+  } catch (e) {
+    assistantEl.className = "chat-bubble error";
+    assistantEl.textContent = "失败：" + friendlyError(e.message || e);
+  } finally {
+    chatBusy = false;
+    sendChatBtn.disabled = false;
+  }
+}
+
+chatGenImage.addEventListener("click", generateImage);
+chatGenVideo.addEventListener("click", generateVideo);
 sendChatBtn.addEventListener("click", sendChatMessage);
 
 chatInput.addEventListener("keydown", (e) => {
