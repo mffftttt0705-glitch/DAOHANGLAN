@@ -2003,3 +2003,115 @@ body {
     max-height: 80px;
   }
 }
+
+/* ========== 首页 AI 导航 ========== */
+.ai-nav-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0.25rem 0 0.35rem;
+  padding-left: 0.15rem;
+}
+
+.ai-nav-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  margin-bottom: 0.65rem;
+}
+
+.ai-nav-item {
+  text-align: left;
+  min-height: 64px;
+}
+
+.ai-nav-item .link-title {
+  font-size: 0.92rem;
+}
+
+.ai-nav-item .link-desc {
+  font-size: 0.72rem;
+}
+
+/* 聊天顶栏模型按钮 */
+.chat-model-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.35rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  max-width: 200px;
+}
+
+.chat-model-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.chat-model-btn span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 更换模型弹窗 */
+#modelPickerModal {
+  z-index: 1250;
+}
+
+.model-picker-panel {
+  max-width: 400px;
+  width: 100%;
+  max-height: 80vh;
+}
+
+.model-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  overflow-y: auto;
+  max-height: 55vh;
+  margin-top: 0.35rem;
+}
+
+.model-picker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.model-picker-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.model-picker-item.active {
+  border-color: rgba(167, 139, 250, 0.55);
+  background: rgba(167, 139, 250, 0.15);
+}
+
+.model-picker-item strong {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.model-picker-item .model-id {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
