@@ -424,25 +424,40 @@ body {
   transform: scale(1.05);
 }
 
-/* ========== 弹窗 ========== */
+/* ========== 弹窗（全局最前，避免重叠） ========== */
 .modal {
   position: fixed;
   inset: 0;
-  z-index: 100;
+  z-index: 1000;
   display: flex;
   align-items: flex-end;
   justify-content: center;
   padding: 1rem;
 }
 
+/* 后开的弹窗压在前面：项目 / 代码包 / 通用对话框更高 */
+#chatModal {
+  z-index: 1000;
+}
+#projectModal {
+  z-index: 1100;
+}
+#codePackModal {
+  z-index: 1200;
+}
+#uiDialog {
+  z-index: 1300;
+}
+
 .modal[hidden] {
-  display: none;
+  display: none !important;
 }
 
 .modal-mask {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 0;
 }
 
 .modal-panel {
@@ -1822,19 +1837,33 @@ body {
   color: var(--text);
 }
 
+/* 项目内页面：同一时间只显示一页，占满面板 */
 #projViewList,
 #projViewForm,
 #projViewDetail,
 #projViewFiles {
-  display: flex;
+  display: none;
   flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+  width: 100%;
 }
 
-#projViewForm {
+#projViewList.is-active,
+#projViewForm.is-active,
+#projViewDetail.is-active,
+#projViewFiles.is-active {
+  display: flex;
+}
+
+#projViewForm.is-active,
+#projViewDetail.is-active {
   overflow-y: auto;
+}
+
+.project-panel {
+  position: relative;
 }
 
 /* 代码包气泡 */
