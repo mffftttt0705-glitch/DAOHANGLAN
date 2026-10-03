@@ -890,11 +890,12 @@ const AI_PROVIDERS = {
     name: "智谱 GLM",
     base: "https://open.bigmodel.cn/api/paas/v4",
     model: "glm-4-flash",
-    tip: 'Key 在 <a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a> 创建。支持识图与部分生图能力。',
+    tip: 'Key 在 <a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a> 创建。生图使用 CogView（需账号开通图像模型）。',
     system: THINK_SYSTEM,
     vision: true,
     imageGen: true,
     imageModel: "cogview-3-flash",
+    imageSize: "1024x1024",
   },
   kimi: {
     name: "Kimi 月之暗面",
@@ -1568,12 +1569,17 @@ async function generateImage() {
   if (!apiKey) return;
 
   chatInput.value = "";
+  const empty = document.getElementById("chatEmpty");
+  if (empty) empty.remove();
+
   const userEl = appendBubble("user");
-  userEl.textContent = "🎨 生成图片：" + prompt;
+  userEl.textContent = "生成图片：" + prompt;
   chatHistory.push({ role: "user", content: "请生成图片：" + prompt });
 
   const assistantEl = appendBubble("assistant", "streaming");
-  assistantEl.textContent = "正在生成图片…";
+  startThinkAnimation(assistantEl);
+  const dirEl = assistantEl.querySelector(".thinking-status-text .dir");
+  if (dirEl) dirEl.textContent = "正在调用图像模型…";
   chatBusy = true;
   sendChatBtn.disabled = true;
 
@@ -1581,37 +1587,106 @@ async function generateImage() {
     if (!provider.imageGen) {
       throw new Error(
         provider.name +
-          " 当前未配置生图接口。可切换到「OpenAI 兼容 / 智谱 / 通义」再试。"
+          " 当前未配置生图接口。请切换到「智谱 GLM / 通义 / OpenAI 兼容」后再试。"
       );
     }
 
-    const imageModel = provider.imageModel || "dall-e-3";
-    let body = { model: imageModel, prompt, n: 1 };
-    if (getCurrentProviderId() === "qwen") {
-      body.size = "1024*1024";
-    } else {
-      body.size = "1024x1024";
+    const pid = getCurrentProviderId();
+    // 按官方文档组装请求体（智谱不要传 n，尺寸用官方推荐值）
+    let modelsToTry = [provider.imageModel || "dall-e-3"];
+    if (pid === "zhipu") {
+      modelsToTry = ["cogview-3-flash", "cogview-4", "glm-image"];
     }
 
-    const res = await apiFetch("/images/generations", body, apiKey, provider);
+    let lastErr = null;
+    let data = null;
 
-    if (!res.ok) {
-      let errText = "HTTP " + res.status;
-      try {
-        const j = await res.json();
-        errText = (j.error && (j.error.message || j.error)) || j.message || JSON.stringify(j);
-      } catch (_) {
-        try {
-          errText = await res.text();
-        } catch (__) {}
+    for (const imageModel of modelsToTry) {
+      let body = { model: imageModel, prompt: prompt };
+      if (pid === "zhipu") {
+        body.size = provider.imageSize || "1024x1024";
+      } else if (pid === "qwen") {
+        body.size = "1024*1024";
+        body.n = 1;
+      } else {
+        body.size = "1024x1024";
+        body.n = 1;
       }
-      throw new Error(errText);
+
+      try {
+        // 生图优先走本站代理，避免浏览器 CORS，并拿到完整错误信息
+        let res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            apiKey,
+            base: provider.base,
+            path: "/images/generations",
+            model: body.model,
+            prompt: body.prompt,
+            size: body.size,
+            n: body.n,
+          }),
+        });
+
+        // 若代理未部署，再尝试直连
+        if (res.status === 404) {
+          res = await fetch(
+            provider.base.replace(/\/$/, "") + "/images/generations",
+            {
+              method: "POST",
+              headers: {
+                Authorization: "Bearer " + apiKey,
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(body),
+            }
+          );
+        }
+
+        const rawText = await res.text();
+        let parsed = null;
+        try {
+          parsed = JSON.parse(rawText);
+        } catch (_) {}
+
+        if (!res.ok) {
+          const msg =
+            (parsed &&
+              ((parsed.error && (parsed.error.message || parsed.error)) ||
+                parsed.message ||
+                parsed.msg)) ||
+            rawText ||
+            "HTTP " + res.status;
+          lastErr = new Error(
+            "HTTP " + res.status + " · " + String(msg).slice(0, 240)
+          );
+          // 模型不可用则试下一个
+          if (
+            res.status === 404 ||
+            res.status === 400 ||
+            /model|不存在|not.?found|无权限|not.?authorized/i.test(String(msg))
+          ) {
+            continue;
+          }
+          throw lastErr;
+        }
+
+        data = parsed;
+        if (data) break;
+      } catch (e) {
+        lastErr = e;
+      }
     }
 
-    const data = await res.json();
+    if (!data) {
+      throw lastErr || new Error("生图失败，未返回数据");
+    }
+
     const item = data.data && data.data[0];
     const url = item && (item.url || item.b64_json || item.image);
 
+    stopThinkAnimation();
     assistantEl.classList.remove("streaming");
     assistantEl.innerHTML = "";
     const tip = document.createElement("div");
@@ -1628,16 +1703,28 @@ async function generateImage() {
           ? url
           : "data:image/png;base64," + url;
       assistantEl.appendChild(img);
-      chatHistory.push({ role: "assistant", content: "（已生成图片：" + prompt + "）" });
+      chatHistory.push({
+        role: "assistant",
+        content: "（已生成图片：" + prompt + "）",
+      });
+      persistCurrentSession();
     } else {
       tip.textContent =
-        "生图接口已返回，但未解析到图片地址：\n" + JSON.stringify(data).slice(0, 400);
+        "接口已返回，但未解析到图片地址：\n" +
+        JSON.stringify(data).slice(0, 400);
     }
   } catch (e) {
     console.error(e);
+    stopThinkAnimation();
     assistantEl.classList.remove("streaming");
     assistantEl.className = "chat-bubble error";
-    assistantEl.textContent = "生图失败：" + friendlyError(e.message || e);
+    let msg = friendlyError(e.message || e);
+    if (/431/.test(String(e.message || e))) {
+      msg =
+        "请求被拒绝（HTTP 431）。常见原因：① Key 未开通图像模型 ② 请到智谱控制台确认已开通 CogView / 图像生成 ③ 重新保存 Key 后再试。原始：" +
+        String(e.message || e).slice(0, 120);
+    }
+    assistantEl.textContent = "生图失败：" + msg;
   } finally {
     chatBusy = false;
     sendChatBtn.disabled = false;
