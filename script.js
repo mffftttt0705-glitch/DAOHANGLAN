@@ -1995,66 +1995,236 @@ async function generateImage() {
   }
 }
 
+/** Agnes Video 2.0 · 免费文生视频 */
+const AGNES_KEY_STORAGE = "ai_agnes_key_v1";
+const AGNES_MODEL = "agnes-video-v2.0";
+
+function getAgnesKey() {
+  const map = loadChatKeys();
+  return (
+    (map.agnes || "").trim() ||
+    (localStorage.getItem(AGNES_KEY_STORAGE) || "").trim() ||
+    getChatApiKey()
+  );
+}
+
+async function ensureAgnesKey() {
+  let key = getAgnesKey();
+  if (key) return key;
+  key = await uiPrompt(
+    "请粘贴 Agnes API Key（platform.agnes-ai.com 免费注册）",
+    "",
+    "Agnes 生视频"
+  );
+  if (!key) return null;
+  key = key.trim();
+  const map = loadChatKeys();
+  map.agnes = key;
+  saveChatKeys(map);
+  localStorage.setItem(AGNES_KEY_STORAGE, key);
+  return key;
+}
+
 async function generateVideo() {
   if (chatBusy) return;
   let prompt = chatInput.value.trim();
   if (!prompt) {
-    prompt = await uiPrompt("请输入视频描述", "", "生成视频");
+    prompt = await uiPrompt("请输入视频描述（建议英文效果更好）", "", "Agnes 生成视频");
     if (!prompt) return;
   }
 
-  const provider = getProvider();
-  const apiKey = ensureApiKey();
+  const apiKey = await ensureAgnesKey();
   if (!apiKey) return;
+
+  const empty = document.getElementById("chatEmpty");
+  if (empty) empty.remove();
 
   chatInput.value = "";
   const userEl = appendBubble("user");
-  userEl.textContent = "🎬 生成视频：" + prompt;
+  userEl.textContent = "生成视频：" + prompt;
+  chatHistory.push({ role: "user", content: "生成视频：" + prompt });
 
-  const assistantEl = appendBubble("assistant");
-  assistantEl.innerHTML =
-    '<div class="answer-body">视频文件生成对 API 要求很高，多数对话 Key 无法直接出片。\n正在为你生成可复制到「可灵 / 即梦 / Runway」的分镜与提示词…</div>';
-
+  const assistantEl = appendBubble("assistant", "streaming");
+  startThinkAnimation(assistantEl);
+  const dirEl = assistantEl.querySelector(".thinking-status-text .dir");
+  if (dirEl) dirEl.textContent = "正在提交 Agnes Video 2.0 任务…";
   chatBusy = true;
   sendChatBtn.disabled = true;
 
   try {
-    const messages = [
-      {
-        role: "system",
-        content:
-          "你是视频导演助手。输出：1) 约15秒分镜 2) 中英文视频提示词 3) 镜头与配乐建议。使用中文。",
-      },
-      { role: "user", content: "主题：" + prompt },
-    ];
-    const res = await apiFetch(
-      "/chat/completions",
-      { model: provider.model, messages, stream: false },
-      apiKey,
-      provider
-    );
-    if (!res.ok) throw new Error("HTTP " + res.status);
-    const data = await res.json();
-    const content =
-      (data.choices &&
-        data.choices[0] &&
-        data.choices[0].message &&
-        data.choices[0].message.content) ||
-      "未能生成分镜。";
+    // 创建任务（约 5 秒：num_frames=121, fps=24）
+    const createRes = await fetch("/api/video", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "create",
+        apiKey,
+        model: AGNES_MODEL,
+        prompt,
+        height: 768,
+        width: 1152,
+        num_frames: 121,
+        frame_rate: 24,
+      }),
+    });
+    const createText = await createRes.text();
+    let createData = null;
+    try {
+      createData = JSON.parse(createText);
+    } catch (_) {}
+    if (!createRes.ok) {
+      throw new Error(
+        (createData && (createData.error || createData.message)) ||
+          createText ||
+          "HTTP " + createRes.status
+      );
+    }
+
+    const videoId =
+      (createData && (createData.video_id || createData.videoId)) || "";
+    const taskId =
+      (createData && (createData.task_id || createData.id || createData.taskId)) ||
+      "";
+    if (!videoId && !taskId) {
+      throw new Error("未返回 video_id，原始：" + createText.slice(0, 200));
+    }
+
+    if (dirEl) dirEl.textContent = "排队生成中，通常 1～3 分钟…";
+
+    // 轮询结果
+    const maxTries = 60;
+    let result = null;
+    for (let i = 0; i < maxTries; i++) {
+      await new Promise((r) => setTimeout(r, 5000));
+      const pollRes = await fetch("/api/video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "poll",
+          apiKey,
+          video_id: videoId,
+          task_id: taskId,
+        }),
+      });
+      const pollText = await pollRes.text();
+      let pollData = null;
+      try {
+        pollData = JSON.parse(pollText);
+      } catch (_) {}
+
+      const status = String(
+        (pollData && (pollData.status || pollData.state || pollData.task_status)) ||
+          ""
+      ).toLowerCase();
+      const progress =
+        (pollData && (pollData.progress || pollData.percent)) != null
+          ? pollData.progress || pollData.percent
+          : null;
+
+      const liveDir = assistantEl.querySelector(".thinking-status-text .dir");
+      if (liveDir) {
+        liveDir.textContent =
+          "生成中 " +
+          (progress != null ? progress + "% · " : "") +
+          "第 " +
+          (i + 1) +
+          "/" +
+          maxTries +
+          " 次查询…";
+      }
+
+      if (
+        status === "completed" ||
+        status === "succeeded" ||
+        status === "success" ||
+        status === "done"
+      ) {
+        result = pollData;
+        break;
+      }
+      if (status === "failed" || status === "error") {
+        throw new Error(
+          (pollData && (pollData.error || pollData.message)) || "视频生成失败"
+        );
+      }
+      // 有时直接返回 url
+      const earlyUrl =
+        pollData &&
+        (pollData.url ||
+          pollData.video_url ||
+          (pollData.data && pollData.data.url) ||
+          (pollData.output && pollData.output.url));
+      if (earlyUrl) {
+        result = pollData;
+        break;
+      }
+    }
+
+    if (!result) {
+      throw new Error("等待超时。可稍后用同一描述重试，高峰期排队较长。");
+    }
+
+    const url =
+      result.url ||
+      result.video_url ||
+      (result.data && (result.data.url || result.data.video_url)) ||
+      (result.output && result.output.url) ||
+      (result.result && result.result.url) ||
+      "";
+
+    stopThinkAnimation();
+    assistantEl.classList.remove("streaming");
     assistantEl.innerHTML = "";
-    const body = document.createElement("div");
-    body.className = "answer-body";
-    body.textContent =
-      "【说明】当前接口一般不直接渲染视频文件。以下内容可复制到专业视频生成平台：\n\n" + content;
-    assistantEl.appendChild(body);
-    chatHistory.push({ role: "user", content: "生成视频：" + prompt });
-    chatHistory.push({ role: "assistant", content: content });
+    const tip = document.createElement("div");
+    tip.className = "answer-body";
+    tip.textContent = "Agnes Video 2.0 已生成：";
+    assistantEl.appendChild(tip);
+
+    if (url) {
+      const video = document.createElement("video");
+      video.className = "msg-media";
+      video.controls = true;
+      video.playsInline = true;
+      video.src = url;
+      video.style.maxHeight = "280px";
+      video.style.width = "100%";
+      video.style.borderRadius = "12px";
+      video.style.marginTop = "0.5rem";
+      assistantEl.appendChild(video);
+      const link = document.createElement("a");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "在新窗口打开 / 下载";
+      link.style.display = "inline-block";
+      link.style.marginTop = "0.45rem";
+      link.style.fontSize = "0.8rem";
+      link.style.color = "#a78bfa";
+      assistantEl.appendChild(link);
+      chatHistory.push({
+        role: "assistant",
+        content: "（已生成视频：" + prompt + "）\n" + url,
+      });
+      persistCurrentSession();
+    } else {
+      tip.textContent =
+        "任务完成但未解析到视频地址：\n" + JSON.stringify(result).slice(0, 400);
+    }
   } catch (e) {
+    console.error(e);
+    stopThinkAnimation();
+    assistantEl.classList.remove("streaming");
     assistantEl.className = "chat-bubble error";
-    assistantEl.textContent = "失败：" + friendlyError(e.message || e);
+    let msg = friendlyError(e.message || e);
+    if (/401|unauthorized|api.?key|令牌|鉴权/i.test(String(e.message || e))) {
+      msg =
+        "Agnes Key 无效。请到 platform.agnes-ai.com 注册并创建 Key，在生视频时重新粘贴。";
+    }
+    assistantEl.textContent = "生视频失败：" + msg;
   } finally {
     chatBusy = false;
     sendChatBtn.disabled = false;
+    chatInput.focus();
   }
 }
 
@@ -2173,7 +2343,9 @@ function formatRelTime(ts) {
 function showProjView(name) {
   ["projViewList", "projViewForm", "projViewDetail", "projViewFiles"].forEach((id) => {
     const el = document.getElementById(id);
-    if (el) el.hidden = id !== name;
+    if (!el) return;
+    el.hidden = false; // 由 is-active 控制显示，避免 [hidden] 与 flex 冲突
+    el.classList.toggle("is-active", id === name);
   });
   const menu = document.getElementById("projMenu");
   if (menu) menu.hidden = true;
@@ -2214,7 +2386,10 @@ function openProjDetail(id) {
 }
 
 function openProjectModal() {
-  document.getElementById("projectModal").hidden = false;
+  const modal = document.getElementById("projectModal");
+  modal.hidden = false;
+  // 确保盖在聊天等所有内容之上
+  modal.style.zIndex = "1100";
   showProjView("projViewList");
   renderProjGrid();
 }
