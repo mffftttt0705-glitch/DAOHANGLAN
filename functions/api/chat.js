@@ -53,12 +53,14 @@ export async function onRequestPost({ request }) {
     const upstreamUrl = base + path;
     let payload;
     if (path === "/images/generations") {
+      // 智谱等只认 model + prompt + size，勿强塞 n
       payload = {
-        model: body.model || "dall-e-3",
+        model: body.model || "cogview-3-flash",
         prompt: body.prompt || "",
-        n: body.n || 1,
-        size: body.size || "1024x1024",
       };
+      if (body.size) payload.size = body.size;
+      if (body.n != null && body.n !== undefined) payload.n = body.n;
+      if (body.quality) payload.quality = body.quality;
     } else {
       payload = {
         model: body.model || DEFAULT_MODEL,
