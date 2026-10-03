@@ -1306,3 +1306,228 @@ body {
 }
 
 .attach-chip button:hover { color: #f87171; }
+
+/* ========== 自定义弹窗 ========== */
+.ui-dialog-panel {
+  max-width: 360px;
+  width: 90%;
+}
+
+.ui-dialog-panel #uiDialogInput {
+  width: 100%;
+  margin: 0.5rem 0 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  padding: 0.55rem 0.7rem;
+  font-family: inherit;
+}
+
+.ui-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+/* 代码块下载 */
+.code-block-wrap {
+  margin: 0.5rem 0;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+}
+
+.code-block-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.3rem 0.55rem;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.code-block-bar button {
+  border: none;
+  background: rgba(167, 139, 250, 0.2);
+  color: #c4b5fd;
+  border-radius: 6px;
+  padding: 0.2rem 0.5rem;
+  font-size: 0.72rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.code-block-bar button:hover {
+  background: rgba(167, 139, 250, 0.35);
+}
+
+.code-block-wrap pre {
+  margin: 0;
+  padding: 0.6rem 0.7rem;
+  overflow-x: auto;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  white-space: pre;
+}
+
+.code-block-wrap code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: #e2e8f0;
+}
+
+/* 文件补丁应用条 */
+.file-patch-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.file-patch-bar button {
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  background: rgba(167, 139, 250, 0.12);
+  color: #c4b5fd;
+  border-radius: 8px;
+  padding: 0.25rem 0.55rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* 项目面板 */
+.project-panel {
+  max-width: 520px;
+  width: 100%;
+  max-height: 92vh;
+  overflow-y: auto;
+}
+
+.project-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+
+.project-header h2 {
+  margin: 0;
+}
+
+.project-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin: 0.5rem 0;
+}
+
+.project-toolbar select {
+  flex: 1;
+  max-width: none;
+}
+
+.field-label {
+  display: block;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin: 0.4rem 0 0.25rem;
+}
+
+#projectPrefs,
+#projectFileEditor {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.28);
+  color: var(--text);
+  padding: 0.55rem 0.7rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  resize: vertical;
+}
+
+#projectFileEditor {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+}
+
+.project-files-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0.6rem 0 0.3rem;
+  font-size: 0.82rem;
+}
+
+.project-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 140px;
+  overflow-y: auto;
+  margin-bottom: 0.5rem;
+}
+
+.project-file-item {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.project-file-item:hover,
+.project-file-item.active {
+  background: rgba(167, 139, 250, 0.15);
+}
+
+.project-file-item span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-file-item .del-file {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.project-file-item .del-file:hover {
+  color: #f87171;
+}
+
+.project-editor-wrap {
+  margin-bottom: 0.5rem;
+}
+
+.project-editor-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-bottom: 0.25rem;
+}
+
+.chat-project-badge {
+  font-size: 0.7rem;
+  color: #c4b5fd;
+  background: rgba(167, 139, 250, 0.15);
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 999px;
+  padding: 0.15rem 0.5rem;
+  margin-left: 0.35rem;
+}
+
+.chat-tool-btn[hidden] {
+  display: none !important;
+}
