@@ -1,9 +1,7 @@
 /**
  * Cloudflare Pages Function · Agnes 视频生成代理
  * POST /api/video
- * body: { action: "create"|"poll", apiKey, prompt?, video_id?, task_id?, ... }
  */
-
 const AGNES_BASE = "https://apihub.agnes-ai.com";
 
 function corsHeaders(extra = {}) {
@@ -37,16 +35,35 @@ export async function onRequestPost({ request }) {
     };
 
     if (action === "create") {
-      const payload = {
-        model: body.model || "agnes-video-v2.0",
-        prompt: body.prompt || "",
-        height: body.height || 768,
-        width: body.width || 1152,
-        num_frames: body.num_frames || 121,
-        frame_rate: body.frame_rate || 24,
-      };
-      if (body.image) payload.image = body.image;
-      if (body.mode) payload.mode = body.mode;
+      const model = body.model || "agnes-video-2.5-flash";
+      let payload;
+
+      if (/2\.5|video-2\.5/i.test(model) || /flash/i.test(model) && /video/i.test(model)) {
+        payload = {
+          model,
+          prompt: body.prompt || "",
+          mode: body.image ? "reference" : "text",
+          seconds: String(body.seconds || "5"),
+          size: body.size || "720P",
+          aspect_ratio: body.aspect_ratio || "16:9",
+        };
+        if (body.image) {
+          payload.images = Array.isArray(body.image) ? body.image : [body.image];
+        }
+      } else {
+        payload = {
+          model: model || "agnes-video-v2.0",
+          prompt: body.prompt || "",
+          height: body.height || 704,
+          width: body.width || 1280,
+          num_frames: body.num_frames || 121,
+          frame_rate: body.frame_rate || 24,
+        };
+        if (body.image) {
+          payload.image = body.image;
+          payload.mode = body.mode || "ti2vid";
+        }
+      }
 
       const upstream = await fetch(AGNES_BASE + "/v1/videos", {
         method: "POST",
@@ -57,8 +74,7 @@ export async function onRequestPost({ request }) {
       return new Response(text, {
         status: upstream.status,
         headers: corsHeaders({
-          "Content-Type":
-            upstream.headers.get("Content-Type") || "application/json",
+          "Content-Type": upstream.headers.get("Content-Type") || "application/json",
         }),
       });
     }
@@ -66,13 +82,15 @@ export async function onRequestPost({ request }) {
     if (action === "poll") {
       const videoId = body.video_id || body.videoId || "";
       const taskId = body.task_id || body.taskId || "";
+      const modelName = body.model || "";
       let url;
       if (videoId) {
         url = AGNES_BASE + "/agnesapi?video_id=" + encodeURIComponent(videoId);
+        if (modelName) url += "&model_name=" + encodeURIComponent(modelName);
       } else if (taskId) {
         url = AGNES_BASE + "/v1/videos/" + encodeURIComponent(taskId);
       } else {
-        return new Response(JSON.stringify({ error: "缺少 video_id 或 task_id" }), {
+        return new Response(JSON.stringify({ error: "缺少 video_id" }), {
           status: 400,
           headers: corsHeaders({ "Content-Type": "application/json" }),
         });
@@ -82,8 +100,7 @@ export async function onRequestPost({ request }) {
       return new Response(text, {
         status: upstream.status,
         headers: corsHeaders({
-          "Content-Type":
-            upstream.headers.get("Content-Type") || "application/json",
+          "Content-Type": upstream.headers.get("Content-Type") || "application/json",
         }),
       });
     }
