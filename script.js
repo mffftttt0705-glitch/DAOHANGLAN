@@ -924,69 +924,126 @@ const THINK_SYSTEM =
 const AI_PROVIDERS = {
   sensenova: {
     name: "商汤日日新",
+    navDesc: "SenseNova 对话",
     base: "https://token.sensenova.cn/v1",
     model: "sensenova-6.8-flash-lite",
-    tip: 'Key 在 <a href="https://platform.sensenova.cn" target="_blank" rel="noopener">商汤控制台</a> 创建。免费额度有限，触发限流请稍后再试。',
+    models: [
+      { id: "sensenova-6.8-flash-lite", label: "SenseNova 6.8 Flash Lite" },
+      { id: "SenseChat-5", label: "SenseChat-5" },
+    ],
+    tip: 'Key 在 <a href="https://platform.sensenova.cn" target="_blank" rel="noopener">商汤控制台</a> 创建。',
     system: THINK_SYSTEM,
     vision: true,
     imageGen: false,
+    videoGen: false,
   },
   deepseek: {
     name: "DeepSeek",
+    navDesc: "深度求索",
     base: "https://api.deepseek.com",
     model: "deepseek-chat",
+    models: [
+      { id: "deepseek-chat", label: "DeepSeek Chat" },
+      { id: "deepseek-reasoner", label: "DeepSeek Reasoner" },
+    ],
     tip: 'Key 在 <a href="https://platform.deepseek.com" target="_blank" rel="noopener">DeepSeek 开放平台</a> 创建。',
     system: THINK_SYSTEM,
     vision: false,
     imageGen: false,
+    videoGen: false,
   },
   qwen: {
     name: "通义千问",
+    navDesc: "阿里百炼",
     base: "https://dashscope.aliyuncs.com/compatible-mode/v1",
     model: "qwen-plus",
-    tip: 'Key 在 <a href="https://dashscope.console.aliyun.com" target="_blank" rel="noopener">阿里云百炼</a> 创建（兼容模式）。生图可用 qwen 图像模型（需平台开通）。',
+    models: [
+      { id: "qwen-plus", label: "Qwen Plus" },
+      { id: "qwen-turbo", label: "Qwen Turbo" },
+      { id: "qwen-max", label: "Qwen Max" },
+    ],
+    tip: 'Key 在 <a href="https://dashscope.console.aliyun.com" target="_blank" rel="noopener">阿里云百炼</a> 创建。',
     system: THINK_SYSTEM,
     vision: true,
     imageGen: true,
     imageModel: "wanx-v1",
+    videoGen: false,
   },
   zhipu: {
     name: "智谱 GLM",
+    navDesc: "智谱清言",
     base: "https://open.bigmodel.cn/api/paas/v4",
     model: "glm-4-flash",
-    tip: 'Key 在 <a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a> 创建。生图使用 CogView（需账号开通图像模型）。',
+    models: [
+      { id: "glm-4-flash", label: "GLM-4 Flash" },
+      { id: "glm-4-air", label: "GLM-4 Air" },
+      { id: "glm-4-plus", label: "GLM-4 Plus" },
+    ],
+    tip: 'Key 在 <a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a> 创建。',
     system: THINK_SYSTEM,
     vision: true,
     imageGen: true,
     imageModel: "cogview-3-flash",
     imageSize: "1024x1024",
+    videoGen: false,
   },
   kimi: {
-    name: "Kimi 月之暗面",
+    name: "Kimi",
+    navDesc: "月之暗面",
     base: "https://api.moonshot.cn/v1",
     model: "moonshot-v1-8k",
+    models: [
+      { id: "moonshot-v1-8k", label: "Moonshot v1 8K" },
+      { id: "moonshot-v1-32k", label: "Moonshot v1 32K" },
+      { id: "moonshot-v1-128k", label: "Moonshot v1 128K" },
+    ],
     tip: 'Key 在 <a href="https://platform.moonshot.cn" target="_blank" rel="noopener">月之暗面控制台</a> 创建。',
     system: THINK_SYSTEM,
     vision: true,
     imageGen: false,
+    videoGen: false,
+  },
+  agnes: {
+    name: "Agnes AI",
+    navDesc: "免费对话 / 生视频",
+    base: "https://apihub.agnes-ai.com/v1",
+    model: "agnes-2.0-flash",
+    models: [
+      { id: "agnes-2.0-flash", label: "Agnes 2.0 Flash" },
+      { id: "agnes-video-v2.0", label: "Agnes Video 2.0（生视频）", video: true },
+    ],
+    tip: 'Key 在 <a href="https://platform.agnes-ai.com" target="_blank" rel="noopener">Agnes 平台</a> 免费注册创建。支持对话与 Video 2.0 生视频。',
+    system: THINK_SYSTEM,
+    vision: false,
+    imageGen: false,
+    videoGen: true,
+    videoModel: "agnes-video-v2.0",
   },
   openai: {
     name: "OpenAI 兼容",
+    navDesc: "GPT / 兼容接口",
     base: "https://api.openai.com/v1",
     model: "gpt-4o-mini",
-    tip: "可填 OpenAI 或任意兼容接口的 Key。支持识图与 DALL·E 生图（需对应模型权限）。",
+    models: [
+      { id: "gpt-4o-mini", label: "GPT-4o mini" },
+      { id: "gpt-4o", label: "GPT-4o" },
+      { id: "gpt-4.1-mini", label: "GPT-4.1 mini" },
+    ],
+    tip: "可填 OpenAI 或任意兼容接口的 Key。",
     system: THINK_SYSTEM,
     vision: true,
     imageGen: true,
     imageModel: "dall-e-3",
+    videoGen: false,
   },
 };
+
+const CHAT_MODEL_KEY = "ai_chat_model_v1"; // providerId -> modelId
 
 const CHAT_PROVIDER_KEY = "ai_chat_provider";
 const CHAT_KEYS_STORAGE = "ai_chat_keys_v1";
 const CHAT_SESSIONS_KEY = "ai_chat_sessions_v1";
 
-const openChatBtn = document.getElementById("openChat");
 const chatModal = document.getElementById("chatModal");
 const chatMask = document.getElementById("chatMask");
 const closeChatBtn = document.getElementById("closeChat");
@@ -995,7 +1052,14 @@ const chatInput = document.getElementById("chatInput");
 const sendChatBtn = document.getElementById("sendChatBtn");
 const chatApiKeyInput = document.getElementById("chatApiKey");
 const saveChatKeyBtn = document.getElementById("saveChatKey");
-const chatModelSelect = document.getElementById("chatModelSelect");
+const chatModelSelect = document.getElementById("chatModelSelect"); // hidden input
+const chatModelLabel = document.getElementById("chatModelLabel");
+const openModelPickerBtn = document.getElementById("openModelPicker");
+const modelPickerModal = document.getElementById("modelPickerModal");
+const modelPickerMask = document.getElementById("modelPickerMask");
+const closeModelPickerBtn = document.getElementById("closeModelPicker");
+const modelPickerList = document.getElementById("modelPickerList");
+const modelPickerProviderName = document.getElementById("modelPickerProviderName");
 const chatKeyTip = document.getElementById("chatKeyTip");
 const chatMenuBtn = document.getElementById("chatMenuBtn");
 const chatDrawer = document.getElementById("chatDrawer");
@@ -1004,6 +1068,7 @@ const chatSettings = document.getElementById("chatSettings");
 const newChatBtn = document.getElementById("newChatBtn");
 const toggleSettingsBtn = document.getElementById("toggleSettingsBtn");
 const chatHistoryList = document.getElementById("chatHistoryList");
+const aiNavGrid = document.getElementById("aiNavGrid");
 
 /** @type {{role: string, content: string}[]} */
 let chatHistory = [];
@@ -1043,12 +1108,47 @@ function saveSessions(list) {
   localStorage.setItem(CHAT_SESSIONS_KEY, JSON.stringify(list));
 }
 
+function loadModelMap() {
+  try {
+    return JSON.parse(localStorage.getItem(CHAT_MODEL_KEY) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function saveModelMap(map) {
+  localStorage.setItem(CHAT_MODEL_KEY, JSON.stringify(map));
+}
+
 function getCurrentProviderId() {
-  return chatModelSelect.value || localStorage.getItem(CHAT_PROVIDER_KEY) || "sensenova";
+  return (
+    (chatModelSelect && chatModelSelect.value) ||
+    localStorage.getItem(CHAT_PROVIDER_KEY) ||
+    "sensenova"
+  );
 }
 
 function getProvider() {
-  return AI_PROVIDERS[getCurrentProviderId()] || AI_PROVIDERS.sensenova;
+  const p = AI_PROVIDERS[getCurrentProviderId()] || AI_PROVIDERS.sensenova;
+  return p;
+}
+
+function getSelectedModelId() {
+  const pid = getCurrentProviderId();
+  const p = getProvider();
+  const map = loadModelMap();
+  const saved = map[pid];
+  if (saved && (p.models || []).some((m) => m.id === saved)) return saved;
+  return p.model;
+}
+
+function setSelectedModelId(modelId) {
+  const pid = getCurrentProviderId();
+  const map = loadModelMap();
+  map[pid] = modelId;
+  saveModelMap(map);
+  const p = getProvider();
+  p.model = modelId;
 }
 
 function getChatApiKey() {
@@ -1056,19 +1156,90 @@ function getChatApiKey() {
   return (map[getCurrentProviderId()] || "").trim();
 }
 
+function currentModelLabel() {
+  const p = getProvider();
+  const mid = getSelectedModelId();
+  const found = (p.models || []).find((m) => m.id === mid);
+  return found ? found.label : mid || p.name;
+}
+
 function applyProviderUI() {
   const id = getCurrentProviderId();
   localStorage.setItem(CHAT_PROVIDER_KEY, id);
+  if (chatModelSelect) chatModelSelect.value = id;
   const p = getProvider();
+  // 同步当前选中的具体模型到 provider.model（请求时用）
+  p.model = getSelectedModelId();
+  if (chatModelLabel) chatModelLabel.textContent = currentModelLabel();
   chatApiKeyInput.value = getChatApiKey();
   chatApiKeyInput.placeholder = "粘贴 " + p.name + " 的 API Key";
   chatKeyTip.innerHTML = p.tip + " Key 只存在本机。";
-  // 无生图能力的模型隐藏生图按钮
   const genImg = document.getElementById("chatGenImage");
   const genVid = document.getElementById("chatGenVideo");
   if (genImg) genImg.hidden = !p.imageGen;
-  // 生视频为提示词辅助，所有模型可用；也可统一保留
-  if (genVid) genVid.hidden = false;
+  // Agnes 或标记了 videoGen 的显示生视频
+  if (genVid) genVid.hidden = !(p.videoGen || id === "agnes");
+}
+
+function renderAiNav() {
+  if (!aiNavGrid) return;
+  aiNavGrid.innerHTML = "";
+  Object.keys(AI_PROVIDERS).forEach((pid) => {
+    const p = AI_PROVIDERS[pid];
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "link-box ai-nav-item";
+    btn.dataset.provider = pid;
+    btn.innerHTML =
+      '<span class="link-title">' +
+      escapeHtml(p.name) +
+      '</span><span class="link-desc">' +
+      escapeHtml(p.navDesc || p.model) +
+      "</span>";
+    btn.addEventListener("click", () => openChatWithProvider(pid));
+    aiNavGrid.appendChild(btn);
+  });
+}
+
+function openChatWithProvider(pid) {
+  if (!AI_PROVIDERS[pid]) pid = "sensenova";
+  if (chatModelSelect) chatModelSelect.value = pid;
+  localStorage.setItem(CHAT_PROVIDER_KEY, pid);
+  openChatModal();
+}
+
+function openModelPicker() {
+  const p = getProvider();
+  const mid = getSelectedModelId();
+  modelPickerProviderName.textContent = p.name + " · 选择具体模型";
+  modelPickerList.innerHTML = "";
+  (p.models || [{ id: p.model, label: p.model }]).forEach((m) => {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "model-picker-item" + (m.id === mid ? " active" : "");
+    row.innerHTML =
+      "<strong>" +
+      escapeHtml(m.label) +
+      '</strong><span class="model-id">' +
+      escapeHtml(m.id) +
+      (m.video ? " · 视频" : "") +
+      "</span>";
+    row.addEventListener("click", () => {
+      setSelectedModelId(m.id);
+      applyProviderUI();
+      modelPickerModal.hidden = true;
+      // 选中视频专用模型时提示用生视频按钮
+      if (m.video) {
+        void uiAlert("已选择视频模型。请点底部「生视频」按钮生成，不要用普通发送。");
+      }
+    });
+    modelPickerList.appendChild(row);
+  });
+  modelPickerModal.hidden = false;
+}
+
+function closeModelPicker() {
+  modelPickerModal.hidden = true;
 }
 
 function showEmptyState() {
@@ -1196,7 +1367,6 @@ function closeChatModal() {
   document.body.style.overflow = "";
 }
 
-openChatBtn.addEventListener("click", openChatModal);
 closeChatBtn.addEventListener("click", closeChatModal);
 chatMask.addEventListener("click", closeChatModal);
 chatMenuBtn.addEventListener("click", () => {
@@ -1213,9 +1383,9 @@ toggleSettingsBtn.addEventListener("click", () => {
   closeDrawer();
 });
 
-chatModelSelect.addEventListener("change", () => {
-  applyProviderUI();
-});
+openModelPickerBtn.addEventListener("click", openModelPicker);
+closeModelPickerBtn.addEventListener("click", closeModelPicker);
+modelPickerMask.addEventListener("click", closeModelPicker);
 
 saveChatKeyBtn.addEventListener("click", () => {
   const key = chatApiKeyInput.value.trim();
@@ -2625,3 +2795,4 @@ document.getElementById("saveProjectFileBtn").addEventListener("click", () => {
 resizeCanvas();
 loadProfile();
 updateProjectBadge();
+renderAiNav();
