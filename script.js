@@ -922,16 +922,91 @@ const THINK_SYSTEM =
   "你是智能助手，请使用中文。复杂问题时先在 <think> 与 </think> 标签内写出简要思考过程，再给出最终回答；简单问候可直接回答。";
 
 const AI_PROVIDERS = {
-  sensenova: {
-    name: "商汤日日新",
-    navDesc: "SenseNova 对话",
-    base: "https://token.sensenova.cn/v1",
-    model: "sensenova-6.8-flash-lite",
+  agnes: {
+    name: "Agnes AI",
+    navDesc: "免费对话 / 生视频",
+    base: "https://apihub.agnes-ai.com/v1",
+    model: "agnes-2.0-flash",
     models: [
-      { id: "sensenova-6.8-flash-lite", label: "SenseNova 6.8 Flash Lite" },
-      { id: "SenseChat-5", label: "SenseChat-5" },
+      { id: "agnes-2.0-flash", label: "Agnes 2.0 Flash" },
+      { id: "agnes-video-2.5-flash", label: "Agnes Video 2.5 Flash（生视频）", video: true },
+      { id: "agnes-video-v2.0", label: "Agnes Video 2.0（生视频）", video: true },
     ],
-    tip: 'Key 在 <a href="https://platform.sensenova.cn" target="_blank" rel="noopener">商汤控制台</a> 创建。',
+    tip: 'Key 在 <a href="https://platform.agnes-ai.com" target="_blank" rel="noopener">Agnes 平台</a> 免费注册。对话用 Flash，生视频请点「生视频」或选 Video 模型后发送。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: true,
+    imageModel: "agnes-image-2.0-flash",
+    videoGen: true,
+    videoModel: "agnes-video-2.5-flash",
+  },
+  openai: {
+    name: "OpenAI / ChatGPT",
+    navDesc: "GPT-4o 系列",
+    base: "https://api.openai.com/v1",
+    model: "gpt-4o-mini",
+    models: [
+      { id: "gpt-4o-mini", label: "GPT-4o mini" },
+      { id: "gpt-4o", label: "GPT-4o" },
+      { id: "gpt-4.1", label: "GPT-4.1" },
+      { id: "gpt-4.1-mini", label: "GPT-4.1 mini" },
+      { id: "o3-mini", label: "o3-mini" },
+    ],
+    tip: "官方 OpenAI Key，或兼容中转的 Base 需自行改代码。",
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: true,
+    imageModel: "dall-e-3",
+    videoGen: false,
+  },
+  grok: {
+    name: "Grok (xAI)",
+    navDesc: "xAI Grok",
+    base: "https://api.x.ai/v1",
+    model: "grok-3-mini",
+    models: [
+      { id: "grok-3-mini", label: "Grok 3 Mini" },
+      { id: "grok-3", label: "Grok 3" },
+      { id: "grok-2", label: "Grok 2" },
+      { id: "grok-2-vision-1212", label: "Grok 2 Vision" },
+    ],
+    tip: 'Key 在 <a href="https://console.x.ai" target="_blank" rel="noopener">xAI Console</a> 创建。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: false,
+    videoGen: false,
+  },
+  claude: {
+    name: "Claude (Anthropic)",
+    navDesc: "Anthropic Claude",
+    base: "https://api.anthropic.com/v1",
+    model: "claude-3-5-haiku-latest",
+    models: [
+      { id: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku" },
+      { id: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet" },
+      { id: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
+      { id: "claude-3-opus-latest", label: "Claude 3 Opus" },
+    ],
+    tip: 'Key 在 <a href="https://console.anthropic.com" target="_blank" rel="noopener">Anthropic Console</a>。注：官方接口非完全 OpenAI 兼容，建议用兼容中转。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: false,
+    videoGen: false,
+    // 用 OpenAI 兼容代理时改 base；直连需不同协议
+    openaiCompat: true,
+  },
+  gemini: {
+    name: "Google Gemini",
+    navDesc: "谷歌 Gemini",
+    base: "https://generativelanguage.googleapis.com/v1beta/openai",
+    model: "gemini-2.0-flash",
+    models: [
+      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
+      { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
+      { id: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
+      { id: "gemini-2.5-pro-preview-05-06", label: "Gemini 2.5 Pro Preview" },
+    ],
+    tip: 'Key 在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 创建（OpenAI 兼容端点）。',
     system: THINK_SYSTEM,
     vision: true,
     imageGen: false,
@@ -943,8 +1018,8 @@ const AI_PROVIDERS = {
     base: "https://api.deepseek.com",
     model: "deepseek-chat",
     models: [
-      { id: "deepseek-chat", label: "DeepSeek Chat" },
-      { id: "deepseek-reasoner", label: "DeepSeek Reasoner" },
+      { id: "deepseek-chat", label: "DeepSeek Chat (V3)" },
+      { id: "deepseek-reasoner", label: "DeepSeek Reasoner (R1)" },
     ],
     tip: 'Key 在 <a href="https://platform.deepseek.com" target="_blank" rel="noopener">DeepSeek 开放平台</a> 创建。',
     system: THINK_SYSTEM,
@@ -961,6 +1036,7 @@ const AI_PROVIDERS = {
       { id: "qwen-plus", label: "Qwen Plus" },
       { id: "qwen-turbo", label: "Qwen Turbo" },
       { id: "qwen-max", label: "Qwen Max" },
+      { id: "qwen-long", label: "Qwen Long" },
     ],
     tip: 'Key 在 <a href="https://dashscope.console.aliyun.com" target="_blank" rel="noopener">阿里云百炼</a> 创建。',
     system: THINK_SYSTEM,
@@ -978,6 +1054,7 @@ const AI_PROVIDERS = {
       { id: "glm-4-flash", label: "GLM-4 Flash" },
       { id: "glm-4-air", label: "GLM-4 Air" },
       { id: "glm-4-plus", label: "GLM-4 Plus" },
+      { id: "glm-4-long", label: "GLM-4 Long" },
     ],
     tip: 'Key 在 <a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a> 创建。',
     system: THINK_SYSTEM,
@@ -996,6 +1073,7 @@ const AI_PROVIDERS = {
       { id: "moonshot-v1-8k", label: "Moonshot v1 8K" },
       { id: "moonshot-v1-32k", label: "Moonshot v1 32K" },
       { id: "moonshot-v1-128k", label: "Moonshot v1 128K" },
+      { id: "kimi-latest", label: "Kimi Latest" },
     ],
     tip: 'Key 在 <a href="https://platform.moonshot.cn" target="_blank" rel="noopener">月之暗面控制台</a> 创建。',
     system: THINK_SYSTEM,
@@ -1003,37 +1081,114 @@ const AI_PROVIDERS = {
     imageGen: false,
     videoGen: false,
   },
-  agnes: {
-    name: "Agnes AI",
-    navDesc: "免费对话 / 生视频",
-    base: "https://apihub.agnes-ai.com/v1",
-    model: "agnes-2.0-flash",
+  sensenova: {
+    name: "商汤日日新",
+    navDesc: "SenseNova",
+    base: "https://token.sensenova.cn/v1",
+    model: "sensenova-6.8-flash-lite",
     models: [
-      { id: "agnes-2.0-flash", label: "Agnes 2.0 Flash" },
-      { id: "agnes-video-v2.0", label: "Agnes Video 2.0（生视频）", video: true },
+      { id: "sensenova-6.8-flash-lite", label: "SenseNova 6.8 Flash Lite" },
+      { id: "SenseChat-5", label: "SenseChat-5" },
     ],
-    tip: 'Key 在 <a href="https://platform.agnes-ai.com" target="_blank" rel="noopener">Agnes 平台</a> 免费注册创建。支持对话与 Video 2.0 生视频。',
+    tip: 'Key 在 <a href="https://platform.sensenova.cn" target="_blank" rel="noopener">商汤控制台</a> 创建。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: false,
+    videoGen: false,
+  },
+  doubao: {
+    name: "豆包 (字节)",
+    navDesc: "火山方舟",
+    base: "https://ark.cn-beijing.volces.com/api/v3",
+    model: "doubao-1-5-lite-32k",
+    models: [
+      { id: "doubao-1-5-lite-32k", label: "Doubao 1.5 Lite" },
+      { id: "doubao-1-5-pro-32k", label: "Doubao 1.5 Pro" },
+      { id: "doubao-seed-1-6-250615", label: "Doubao Seed 1.6" },
+    ],
+    tip: 'Key 在 <a href="https://console.volcengine.com/ark" target="_blank" rel="noopener">火山方舟</a> 创建，模型 ID 以控制台接入点为准。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: false,
+    videoGen: false,
+  },
+  baichuan: {
+    name: "百川",
+    navDesc: "Baichuan",
+    base: "https://api.baichuan-ai.com/v1",
+    model: "Baichuan4-Turbo",
+    models: [
+      { id: "Baichuan4-Turbo", label: "Baichuan4 Turbo" },
+      { id: "Baichuan4-Air", label: "Baichuan4 Air" },
+    ],
+    tip: 'Key 在 <a href="https://platform.baichuan-ai.com" target="_blank" rel="noopener">百川智能</a> 创建。',
     system: THINK_SYSTEM,
     vision: false,
     imageGen: false,
-    videoGen: true,
-    videoModel: "agnes-video-v2.0",
+    videoGen: false,
   },
-  openai: {
-    name: "OpenAI 兼容",
-    navDesc: "GPT / 兼容接口",
-    base: "https://api.openai.com/v1",
-    model: "gpt-4o-mini",
+  yi: {
+    name: "零一万物 Yi",
+    navDesc: "01.AI",
+    base: "https://api.lingyiwanwu.com/v1",
+    model: "yi-lightning",
     models: [
-      { id: "gpt-4o-mini", label: "GPT-4o mini" },
-      { id: "gpt-4o", label: "GPT-4o" },
-      { id: "gpt-4.1-mini", label: "GPT-4.1 mini" },
+      { id: "yi-lightning", label: "Yi Lightning" },
+      { id: "yi-large", label: "Yi Large" },
+      { id: "yi-spark", label: "Yi Spark" },
     ],
-    tip: "可填 OpenAI 或任意兼容接口的 Key。",
+    tip: 'Key 在 <a href="https://platform.lingyiwanwu.com" target="_blank" rel="noopener">零一万物</a> 创建。',
+    system: THINK_SYSTEM,
+    vision: false,
+    imageGen: false,
+    videoGen: false,
+  },
+  stepfun: {
+    name: "阶跃星辰",
+    navDesc: "StepFun",
+    base: "https://api.stepfun.com/v1",
+    model: "step-2-mini",
+    models: [
+      { id: "step-2-mini", label: "Step 2 Mini" },
+      { id: "step-1-8k", label: "Step 1 8K" },
+      { id: "step-1v-8k", label: "Step 1V 8K（识图）" },
+    ],
+    tip: 'Key 在 <a href="https://platform.stepfun.com" target="_blank" rel="noopener">阶跃星辰</a> 创建。',
     system: THINK_SYSTEM,
     vision: true,
+    imageGen: false,
+    videoGen: false,
+  },
+  minimax: {
+    name: "MiniMax",
+    navDesc: "稀宇科技",
+    base: "https://api.minimax.chat/v1",
+    model: "MiniMax-Text-01",
+    models: [
+      { id: "MiniMax-Text-01", label: "MiniMax Text 01" },
+      { id: "abab6.5s-chat", label: "ABAB 6.5s" },
+    ],
+    tip: 'Key 在 <a href="https://platform.minimaxi.com" target="_blank" rel="noopener">MiniMax 开放平台</a> 创建。',
+    system: THINK_SYSTEM,
+    vision: false,
+    imageGen: false,
+    videoGen: false,
+  },
+  siliconflow: {
+    name: "硅基流动",
+    navDesc: "开源模型聚合",
+    base: "https://api.siliconflow.cn/v1",
+    model: "deepseek-ai/DeepSeek-V3",
+    models: [
+      { id: "deepseek-ai/DeepSeek-V3", label: "DeepSeek V3" },
+      { id: "Qwen/Qwen2.5-72B-Instruct", label: "Qwen2.5 72B" },
+      { id: "meta-llama/Meta-Llama-3.1-70B-Instruct", label: "Llama 3.1 70B" },
+    ],
+    tip: 'Key 在 <a href="https://cloud.siliconflow.cn" target="_blank" rel="noopener">硅基流动</a> 创建，模型名以控制台为准。',
+    system: THINK_SYSTEM,
+    vision: false,
     imageGen: true,
-    imageModel: "dall-e-3",
+    imageModel: "black-forest-labs/FLUX.1-schnell",
     videoGen: false,
   },
 };
@@ -1483,6 +1638,17 @@ chatFileInput.addEventListener("change", async () => {
   const file = chatFileInput.files[0];
   chatFileInput.value = "";
   if (!file) return;
+  // 图片误走「文件」时按图片处理
+  if (/^image\//i.test(file.type) || /\.(jpe?g|png|gif|webp|bmp)$/i.test(file.name)) {
+    try {
+      const dataUrl = await fileToDataURLLimited(file, 1.5 * 1024 * 1024);
+      pendingAttach = { type: "image", name: file.name, dataUrl, mime: file.type || "image/jpeg" };
+      renderAttachPreview();
+    } catch (e) {
+      void uiAlert(e.message || "图片读取失败");
+    }
+    return;
+  }
   try {
     const text = await fileToText(file);
     pendingAttach = { type: "file", name: file.name, text };
@@ -1861,6 +2027,21 @@ async function sendChatMessage() {
   const attach = pendingAttach;
   if (!text && !attach) return;
 
+  // 生视频模式 或 选中了 video 模型 → 走视频接口
+  const mid = getSelectedModelId();
+  if (videoMode || /video/i.test(mid)) {
+    if (!text) {
+      void uiAlert("请输入视频描述后再发送");
+      return;
+    }
+    const img = attach && attach.type === "image" ? attach.dataUrl : null;
+    chatInput.value = "";
+    pendingAttach = null;
+    renderAttachPreview();
+    await runAgnesVideoGeneration(text, img);
+    return;
+  }
+
   const provider = getProvider();
   const apiKey = ensureApiKey();
   if (!apiKey) return;
@@ -2167,13 +2348,29 @@ async function generateImage() {
 
 /** Agnes Video 2.0 · 免费文生视频 */
 const AGNES_KEY_STORAGE = "ai_agnes_key_v1";
-const AGNES_MODEL = "agnes-video-v2.0";
+const AGNES_VIDEO_MODELS = ["agnes-video-2.5-flash", "agnes-video-v2.0", "agnes-video-2.5"];
+
+let videoMode = false;
+
+function setVideoMode(on) {
+  videoMode = !!on;
+  if (chatGenVideo) {
+    chatGenVideo.classList.toggle("active", videoMode);
+    chatGenVideo.title = videoMode ? "生视频模式已开启（再点关闭）" : "生成视频";
+  }
+  if (chatInput) {
+    chatInput.placeholder = videoMode
+      ? "描述要生成的视频，可附图后点发送…"
+      : "发送消息…";
+  }
+}
 
 function getAgnesKey() {
   const map = loadChatKeys();
   return (
     (map.agnes || "").trim() ||
     (localStorage.getItem(AGNES_KEY_STORAGE) || "").trim() ||
+    (getCurrentProviderId() === "agnes" ? getChatApiKey() : "") ||
     getChatApiKey()
   );
 }
@@ -2195,74 +2392,117 @@ async function ensureAgnesKey() {
   return key;
 }
 
-async function generateVideo() {
-  if (chatBusy) return;
-  let prompt = chatInput.value.trim();
-  if (!prompt) {
-    prompt = await uiPrompt("请输入视频描述（建议英文效果更好）", "", "Agnes 生成视频");
-    if (!prompt) return;
-  }
+function pickVideoModelId() {
+  const mid = getSelectedModelId();
+  if (/video/i.test(mid)) return mid;
+  const p = AI_PROVIDERS.agnes || {};
+  return p.videoModel || "agnes-video-2.5-flash";
+}
 
+function extractErrMsg(data, fallback) {
+  if (!data) return fallback;
+  if (typeof data === "string") return data;
+  if (data.error) {
+    if (typeof data.error === "string") return data.error;
+    if (data.error.message) return data.error.message;
+    if (data.error.code) return "error code: " + data.error.code;
+  }
+  if (data.message) return data.message;
+  if (data.detail) return typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail);
+  if (data.msg) return data.msg;
+  return fallback;
+}
+
+/** 真正发起 Agnes 视频任务（可带参考图 dataURL / URL） */
+async function runAgnesVideoGeneration(prompt, imageDataUrl) {
   const apiKey = await ensureAgnesKey();
   if (!apiKey) return;
 
   const empty = document.getElementById("chatEmpty");
   if (empty) empty.remove();
 
-  chatInput.value = "";
   const userEl = appendBubble("user");
-  userEl.textContent = "生成视频：" + prompt;
+  setUserBubble(
+    userEl,
+    "生成视频：" + prompt,
+    imageDataUrl ? { type: "image", dataUrl: imageDataUrl, name: "参考图" } : null
+  );
   chatHistory.push({ role: "user", content: "生成视频：" + prompt });
 
   const assistantEl = appendBubble("assistant", "streaming");
   startThinkAnimation(assistantEl);
   const dirEl = assistantEl.querySelector(".thinking-status-text .dir");
-  if (dirEl) dirEl.textContent = "正在提交 Agnes Video 2.0 任务…";
+  if (dirEl) dirEl.textContent = "正在提交视频任务…";
   chatBusy = true;
   sendChatBtn.disabled = true;
 
+  const modelsToTry = [
+    pickVideoModelId(),
+    "agnes-video-2.5-flash",
+    "agnes-video-v2.0",
+  ].filter((v, i, a) => a.indexOf(v) === i);
+
   try {
-    // 创建任务（约 5 秒：num_frames=121, fps=24）
-    const createRes = await fetch("/api/video", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    let createData = null;
+    let usedModel = modelsToTry[0];
+    let lastErr = null;
+
+    for (const model of modelsToTry) {
+      usedModel = model;
+      if (dirEl) dirEl.textContent = "提交 " + model + " …";
+      const body = {
         action: "create",
         apiKey,
-        model: AGNES_MODEL,
+        model,
         prompt,
-        height: 768,
-        width: 1152,
+        seconds: "5",
+        size: "720P",
+        aspect_ratio: "16:9",
+        height: 704,
+        width: 1280,
         num_frames: 121,
         frame_rate: 24,
-      }),
-    });
-    const createText = await createRes.text();
-    let createData = null;
-    try {
-      createData = JSON.parse(createText);
-    } catch (_) {}
-    if (!createRes.ok) {
-      throw new Error(
-        (createData && (createData.error || createData.message)) ||
-          createText ||
-          "HTTP " + createRes.status
-      );
+      };
+      // 图生视频：Agnes 通常需要公网 URL；dataURL 可能失败，仍尝试
+      if (imageDataUrl) {
+        if (imageDataUrl.startsWith("http")) body.image = imageDataUrl;
+        else body.image = imageDataUrl; // 部分网关接受 data URL
+      }
+      const createRes = await fetch("/api/video", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const createText = await createRes.text();
+      let parsed = null;
+      try {
+        parsed = JSON.parse(createText);
+      } catch (_) {}
+      if (createRes.ok) {
+        createData = parsed;
+        break;
+      }
+      lastErr = new Error(extractErrMsg(parsed, createText || "HTTP " + createRes.status));
+      // 参数类错误换模型再试
+      if (createRes.status === 400 || createRes.status === 422 || /1015|parameter|invalid/i.test(String(lastErr.message))) {
+        continue;
+      }
+      throw lastErr;
     }
+
+    if (!createData) throw lastErr || new Error("创建视频任务失败");
 
     const videoId =
-      (createData && (createData.video_id || createData.videoId)) || "";
+      createData.video_id || createData.videoId || (createData.data && createData.data.video_id) || "";
     const taskId =
-      (createData && (createData.task_id || createData.id || createData.taskId)) ||
-      "";
+      createData.task_id || createData.id || createData.taskId || "";
     if (!videoId && !taskId) {
-      throw new Error("未返回 video_id，原始：" + createText.slice(0, 200));
+      throw new Error("未返回 video_id：" + JSON.stringify(createData).slice(0, 240));
     }
 
-    if (dirEl) dirEl.textContent = "排队生成中，通常 1～3 分钟…";
+    if (dirEl) dirEl.textContent = "排队生成中（1～3 分钟，请勿关闭）…";
 
-    // 轮询结果
-    const maxTries = 60;
+    const maxTries = 72;
     let result = null;
     for (let i = 0; i < maxTries; i++) {
       await new Promise((r) => setTimeout(r, 5000));
@@ -2274,6 +2514,7 @@ async function generateVideo() {
           apiKey,
           video_id: videoId,
           task_id: taskId,
+          model: usedModel,
         }),
       });
       const pollText = await pollRes.text();
@@ -2283,56 +2524,41 @@ async function generateVideo() {
       } catch (_) {}
 
       const status = String(
-        (pollData && (pollData.status || pollData.state || pollData.task_status)) ||
-          ""
+        (pollData && (pollData.status || pollData.state || pollData.task_status)) || ""
       ).toLowerCase();
       const progress =
-        (pollData && (pollData.progress || pollData.percent)) != null
-          ? pollData.progress || pollData.percent
-          : null;
-
+        pollData && (pollData.progress != null ? pollData.progress : pollData.percent);
       const liveDir = assistantEl.querySelector(".thinking-status-text .dir");
       if (liveDir) {
         liveDir.textContent =
-          "生成中 " +
-          (progress != null ? progress + "% · " : "") +
-          "第 " +
+          "生成中" +
+          (progress != null ? " " + progress + "%" : "") +
+          " · " +
           (i + 1) +
           "/" +
-          maxTries +
-          " 次查询…";
+          maxTries;
       }
 
-      if (
-        status === "completed" ||
-        status === "succeeded" ||
-        status === "success" ||
-        status === "done"
-      ) {
+      const urlEarly =
+        pollData &&
+        (pollData.url ||
+          pollData.video_url ||
+          (pollData.data && (pollData.data.url || pollData.data.video_url)) ||
+          (pollData.output && pollData.output.url));
+      if (urlEarly) {
+        result = pollData;
+        break;
+      }
+      if (["completed", "succeeded", "success", "done"].includes(status)) {
         result = pollData;
         break;
       }
       if (status === "failed" || status === "error") {
-        throw new Error(
-          (pollData && (pollData.error || pollData.message)) || "视频生成失败"
-        );
-      }
-      // 有时直接返回 url
-      const earlyUrl =
-        pollData &&
-        (pollData.url ||
-          pollData.video_url ||
-          (pollData.data && pollData.data.url) ||
-          (pollData.output && pollData.output.url));
-      if (earlyUrl) {
-        result = pollData;
-        break;
+        throw new Error(extractErrMsg(pollData, "视频生成失败"));
       }
     }
 
-    if (!result) {
-      throw new Error("等待超时。可稍后用同一描述重试，高峰期排队较长。");
-    }
+    if (!result) throw new Error("等待超时，高峰期请错峰再试。");
 
     const url =
       result.url ||
@@ -2347,7 +2573,7 @@ async function generateVideo() {
     assistantEl.innerHTML = "";
     const tip = document.createElement("div");
     tip.className = "answer-body";
-    tip.textContent = "Agnes Video 2.0 已生成：";
+    tip.textContent = "视频已生成（" + usedModel + "）：";
     assistantEl.appendChild(tip);
 
     if (url) {
@@ -2371,24 +2597,28 @@ async function generateVideo() {
       link.style.fontSize = "0.8rem";
       link.style.color = "#a78bfa";
       assistantEl.appendChild(link);
-      chatHistory.push({
-        role: "assistant",
-        content: "（已生成视频：" + prompt + "）\n" + url,
-      });
+      chatHistory.push({ role: "assistant", content: "（已生成视频）\n" + url });
       persistCurrentSession();
     } else {
       tip.textContent =
-        "任务完成但未解析到视频地址：\n" + JSON.stringify(result).slice(0, 400);
+        "任务完成但未解析到地址：\n" + JSON.stringify(result).slice(0, 400);
     }
   } catch (e) {
     console.error(e);
     stopThinkAnimation();
     assistantEl.classList.remove("streaming");
     assistantEl.className = "chat-bubble error";
-    let msg = friendlyError(e.message || e);
-    if (/401|unauthorized|api.?key|令牌|鉴权/i.test(String(e.message || e))) {
+    let msg = String(e.message || e);
+    if (/1015/.test(msg)) {
       msg =
-        "Agnes Key 无效。请到 platform.agnes-ai.com 注册并创建 Key，在生视频时重新粘贴。";
+        "参数或队列异常（1015）。已自动换模型重试仍失败时：① 简化中文/英文描述 ② 去掉透明背景等特殊要求 ③ 稍后再试。原始：" +
+        msg.slice(0, 120);
+    } else if (/401|unauthorized|api.?key|令牌|鉴权/i.test(msg)) {
+      msg = "Agnes Key 无效，请在 API 设置中重新保存 platform.agnes-ai.com 的 Key。";
+    } else if (/queue|503|full|限流|429/i.test(msg)) {
+      msg = "视频队列繁忙或限流，请等待 1～5 分钟后再试。";
+    } else {
+      msg = friendlyError(msg);
     }
     assistantEl.textContent = "生视频失败：" + msg;
   } finally {
@@ -2398,8 +2628,15 @@ async function generateVideo() {
   }
 }
 
-chatGenImage.addEventListener("click", generateImage);
-chatGenVideo.addEventListener("click", generateVideo);
+async function generateVideo() {
+  // 点击切换「生视频模式」，不立即请求
+  setVideoMode(!videoMode);
+  if (videoMode) {
+    void uiAlert("已开启生视频模式：在下方输入描述，可点「图片」附图，再点发送。再点一次摄像机图标可关闭。");
+  }
+}
+
+chatGenVideo.addEventListener("click", () => { generateVideo(); });
 sendChatBtn.addEventListener("click", sendChatMessage);
 
 chatInput.addEventListener("keydown", (e) => {
