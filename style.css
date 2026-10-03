@@ -1531,3 +1531,446 @@ body {
 .chat-tool-btn[hidden] {
   display: none !important;
 }
+
+/* ========== Grok 风格项目 ========== */
+.project-panel {
+  max-width: 480px;
+  width: 100%;
+  max-height: 94vh;
+  height: min(720px, 94vh);
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 0.85rem 1rem;
+  overflow: hidden;
+}
+
+.proj-topbar {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+  margin-bottom: 0.75rem;
+}
+
+.proj-topbar h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 1.05rem;
+  text-align: center;
+}
+
+.proj-create-btn {
+  font-weight: 600;
+  color: #a78bfa !important;
+}
+
+.proj-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+  overflow-y: auto;
+  flex: 1;
+  padding-bottom: 0.5rem;
+}
+
+.proj-card {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 1rem 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  text-align: left;
+  color: inherit;
+  font-family: inherit;
+  min-height: 100px;
+}
+
+.proj-card:hover {
+  background: rgba(255, 255, 255, 0.11);
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+.proj-card.active-proj {
+  border-color: rgba(167, 139, 250, 0.55);
+  background: rgba(167, 139, 250, 0.12);
+}
+
+.proj-card-icon {
+  margin-bottom: 0.55rem;
+  color: var(--text-muted);
+}
+
+.proj-card-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proj-card-meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.proj-empty {
+  text-align: center;
+  color: var(--text-muted);
+  margin-top: 2rem;
+  font-size: 0.88rem;
+}
+
+.proj-form-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: 0.75rem;
+}
+
+.proj-form-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+#projFormName {
+  flex: 1;
+  border-radius: 12px;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  background: transparent;
+  color: var(--text);
+  padding: 0.65rem 0.85rem;
+  font-family: inherit;
+  font-size: 0.95rem;
+}
+
+#projFormPrefs {
+  width: 100%;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  padding: 0.75rem;
+  font-family: inherit;
+  font-size: 0.88rem;
+  resize: vertical;
+  min-height: 100px;
+}
+
+.proj-upload-btn {
+  width: 100%;
+  border: none;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+  padding: 0.85rem 1rem;
+  font-family: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-align: left;
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.proj-upload-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.proj-upload-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.35rem;
+}
+
+.proj-upload-item {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  font-size: 0.82rem;
+}
+
+.proj-upload-item span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.proj-upload-item button {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.proj-detail-title {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.proj-detail-title h2 {
+  text-align: left;
+  flex: none;
+}
+
+.proj-detail-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.proj-detail-actions .btn {
+  flex: 1;
+}
+
+.proj-menu {
+  position: absolute;
+  right: 1rem;
+  top: 3.2rem;
+  z-index: 5;
+  background: rgba(20, 24, 38, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 14px;
+  padding: 0.35rem;
+  min-width: 160px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+}
+
+.proj-menu button {
+  display: block;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  padding: 0.65rem 0.85rem;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.88rem;
+  cursor: pointer;
+}
+
+.proj-menu button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.proj-menu button.danger {
+  color: #f87171;
+}
+
+.proj-browser {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.proj-browser-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 0.4rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+  font-size: 0.88rem;
+}
+
+.proj-browser-row:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.proj-browser-row .meta {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-left: auto;
+  margin-right: 0.35rem;
+}
+
+.proj-browser-row .row-acts {
+  display: flex;
+  gap: 0.25rem;
+  opacity: 0.7;
+}
+
+.proj-browser-row .row-acts button {
+  border: none;
+  background: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.2rem;
+}
+
+.proj-browser-row .row-acts button:hover {
+  color: var(--text);
+}
+
+#projViewList,
+#projViewForm,
+#projViewDetail,
+#projViewFiles {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+#projViewForm {
+  overflow-y: auto;
+}
+
+/* 代码包气泡 */
+.code-pack-card {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 14px;
+  background: rgba(167, 139, 250, 0.1);
+  border: 1px solid rgba(167, 139, 250, 0.28);
+  cursor: pointer;
+  transition: background 0.2s;
+  max-width: 280px;
+}
+
+.code-pack-card:hover {
+  background: rgba(167, 139, 250, 0.18);
+}
+
+.code-pack-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(167, 139, 250, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c4b5fd;
+  flex-shrink: 0;
+}
+
+.code-pack-info {
+  min-width: 0;
+}
+
+.code-pack-info strong {
+  display: block;
+  font-size: 0.88rem;
+  margin-bottom: 0.15rem;
+}
+
+.code-pack-info span {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.codepack-panel {
+  max-width: 640px;
+  width: 100%;
+  max-height: 92vh;
+  height: min(640px, 92vh);
+  display: flex;
+  flex-direction: column;
+}
+
+.codepack-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  gap: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.5rem;
+}
+
+.codepack-files {
+  width: 140px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.codepack-file-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  text-align: left;
+  padding: 0.45rem 0.5rem;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codepack-file-btn.active,
+.codepack-file-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+
+.codepack-preview {
+  flex: 1;
+  margin: 0;
+  padding: 0.6rem;
+  overflow: auto;
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 10px;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.codepack-preview code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: pre;
+  color: #e2e8f0;
+}
+
+.codepack-frame {
+  width: 100%;
+  height: 280px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-top: 0.5rem;
+  background: #fff;
+}
+
+@media (max-width: 640px) {
+  .project-panel,
+  .codepack-panel {
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    border-radius: 0;
+  }
+  .codepack-layout {
+    flex-direction: column;
+  }
+  .codepack-files {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-height: 80px;
+  }
+}
