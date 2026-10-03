@@ -918,7 +918,8 @@ const AI_PROVIDERS = {
 };
 
 const CHAT_PROVIDER_KEY = "ai_chat_provider";
-const CHAT_KEYS_STORAGE = "ai_chat_keys_v1"; // { providerId: apiKey }
+const CHAT_KEYS_STORAGE = "ai_chat_keys_v1";
+const CHAT_SESSIONS_KEY = "ai_chat_sessions_v1";
 
 const openChatBtn = document.getElementById("openChat");
 const chatModal = document.getElementById("chatModal");
@@ -927,15 +928,31 @@ const closeChatBtn = document.getElementById("closeChat");
 const chatMessages = document.getElementById("chatMessages");
 const chatInput = document.getElementById("chatInput");
 const sendChatBtn = document.getElementById("sendChatBtn");
-const clearChatBtn = document.getElementById("clearChatBtn");
 const chatApiKeyInput = document.getElementById("chatApiKey");
 const saveChatKeyBtn = document.getElementById("saveChatKey");
 const chatModelSelect = document.getElementById("chatModelSelect");
 const chatKeyTip = document.getElementById("chatKeyTip");
+const chatMenuBtn = document.getElementById("chatMenuBtn");
+const chatDrawer = document.getElementById("chatDrawer");
+const chatDrawerMask = document.getElementById("chatDrawerMask");
+const chatSettings = document.getElementById("chatSettings");
+const newChatBtn = document.getElementById("newChatBtn");
+const toggleSettingsBtn = document.getElementById("toggleSettingsBtn");
+const chatHistoryList = document.getElementById("chatHistoryList");
 
 /** @type {{role: string, content: string}[]} */
 let chatHistory = [];
 let chatBusy = false;
+let currentSessionId = null;
+let thinkTimer = null;
+
+const THINK_DIRS = [
+  "分析问题要点…",
+  "检索相关知识…",
+  "组织回答结构…",
+  "检查表述是否清晰…",
+  "整理关键信息…",
+];
 
 function loadChatKeys() {
   try {
@@ -947,6 +964,18 @@ function loadChatKeys() {
 
 function saveChatKeys(map) {
   localStorage.setItem(CHAT_KEYS_STORAGE, JSON.stringify(map));
+}
+
+function loadSessions() {
+  try {
+    return JSON.parse(localStorage.getItem(CHAT_SESSIONS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveSessions(list) {
+  localStorage.setItem(CHAT_SESSIONS_KEY, JSON.stringify(list));
 }
 
 function getCurrentProviderId() {
@@ -971,16 +1000,127 @@ function applyProviderUI() {
   chatKeyTip.innerHTML = p.tip + " Key 只存在本机。";
 }
 
+function showEmptyState() {
+  chatMessages.innerHTML =
+    '<div class="chat-empty" id="chatEmpty"><div class="chat-empty-title">有什么可以帮你？</div><div class="chat-empty-hint">选择模型并在菜单中配置 API Key 后开始</div></div>';
+}
+
+function persistCurrentSession() {
+  if (!chatHistory.length) return;
+  const list = loadSessions();
+  const title =
+    (typeof chatHistory[0].content === "string"
+      ? chatHistory[0].content
+      : "新对话"
+    ).replace(/\s+/g, " ").slice(0, 28) || "新对话";
+  const item = {
+    id: currentSessionId || "s_" + Date.now().toString(36),
+    title,
+    updated: Date.now(),
+    provider: getCurrentProviderId(),
+    messages: chatHistory,
+  };
+  currentSessionId = item.id;
+  const idx = list.findIndex((x) => x.id === item.id);
+  if (idx >= 0) list[idx] = item;
+  else list.unshift(item);
+  saveSessions(list.slice(0, 40));
+  renderHistoryList();
+}
+
+function renderHistoryList() {
+  const list = loadSessions();
+  chatHistoryList.innerHTML = "";
+  if (!list.length) {
+    chatHistoryList.innerHTML =
+      '<div class="field-tip" style="padding:0.5rem 0.75rem">暂无历史</div>';
+    return;
+  }
+  list.forEach((s) => {
+    const row = document.createElement("div");
+    row.className =
+      "chat-history-item" + (s.id === currentSessionId ? " active" : "");
+    row.innerHTML =
+      "<span>" +
+      escapeHtml(s.title || "对话") +
+      '</span><button type="button" class="del-hist" data-id="' +
+      s.id +
+      '" title="删除">×</button>';
+    row.querySelector("span").addEventListener("click", () => {
+      loadSession(s.id);
+      closeDrawer();
+    });
+    row.querySelector(".del-hist").addEventListener("click", (e) => {
+      e.stopPropagation();
+      const next = loadSessions().filter((x) => x.id !== s.id);
+      saveSessions(next);
+      if (currentSessionId === s.id) startNewChat();
+      renderHistoryList();
+    });
+    chatHistoryList.appendChild(row);
+  });
+}
+
+function loadSession(id) {
+  const s = loadSessions().find((x) => x.id === id);
+  if (!s) return;
+  currentSessionId = s.id;
+  chatHistory = s.messages || [];
+  if (s.provider && AI_PROVIDERS[s.provider]) {
+    chatModelSelect.value = s.provider;
+    applyProviderUI();
+  }
+  chatMessages.innerHTML = "";
+  if (!chatHistory.length) {
+    showEmptyState();
+    return;
+  }
+  chatHistory.forEach((m) => {
+    if (m.role === "user") {
+      const el = appendBubble("user");
+      const t = typeof m.content === "string" ? m.content : "（含图片/附件）";
+      el.textContent = t;
+    } else if (m.role === "assistant") {
+      const el = appendBubble("assistant");
+      renderAssistantBubble(el, typeof m.content === "string" ? m.content : "", "");
+    }
+  });
+  renderHistoryList();
+}
+
+function startNewChat() {
+  if (chatHistory.length) persistCurrentSession();
+  currentSessionId = "s_" + Date.now().toString(36);
+  chatHistory = [];
+  showEmptyState();
+  renderHistoryList();
+}
+
+function openDrawer() {
+  chatDrawer.hidden = false;
+  chatDrawerMask.hidden = false;
+  renderHistoryList();
+}
+
+function closeDrawer() {
+  chatDrawer.hidden = true;
+  chatDrawerMask.hidden = true;
+}
+
 function openChatModal() {
   const saved = localStorage.getItem(CHAT_PROVIDER_KEY);
   if (saved && AI_PROVIDERS[saved]) chatModelSelect.value = saved;
   applyProviderUI();
+  if (!currentSessionId) currentSessionId = "s_" + Date.now().toString(36);
+  if (!chatHistory.length) showEmptyState();
   chatModal.hidden = false;
   document.body.style.overflow = "hidden";
   chatInput.focus();
 }
 
 function closeChatModal() {
+  closeDrawer();
+  if (chatHistory.length) persistCurrentSession();
   chatModal.hidden = true;
   document.body.style.overflow = "";
 }
@@ -988,15 +1128,22 @@ function closeChatModal() {
 openChatBtn.addEventListener("click", openChatModal);
 closeChatBtn.addEventListener("click", closeChatModal);
 chatMask.addEventListener("click", closeChatModal);
+chatMenuBtn.addEventListener("click", () => {
+  if (chatDrawer.hidden) openDrawer();
+  else closeDrawer();
+});
+chatDrawerMask.addEventListener("click", closeDrawer);
+newChatBtn.addEventListener("click", () => {
+  startNewChat();
+  closeDrawer();
+});
+toggleSettingsBtn.addEventListener("click", () => {
+  chatSettings.hidden = !chatSettings.hidden;
+  closeDrawer();
+});
 
 chatModelSelect.addEventListener("change", () => {
   applyProviderUI();
-  // 切换模型时清空对话，避免上下文混乱
-  chatHistory = [];
-  chatMessages.innerHTML =
-    '<div class="chat-bubble system">已切换到 ' +
-    getProvider().name +
-    "。填入对应 Key 后开始对话。</div>";
 });
 
 saveChatKeyBtn.addEventListener("click", () => {
@@ -1008,6 +1155,7 @@ saveChatKeyBtn.addEventListener("click", () => {
   const map = loadChatKeys();
   map[getCurrentProviderId()] = key;
   saveChatKeys(map);
+  chatSettings.hidden = true;
   alert(getProvider().name + " 的 API Key 已保存到本机");
 });
 
@@ -1146,16 +1294,48 @@ function parseThinkAnswer(raw) {
   return { think: "", answer: s };
 }
 
+function showThinkingStatus(el, dirText) {
+  el.classList.add("streaming");
+  el.innerHTML =
+    '<div class="thinking-status"><div class="thinking-spinner"></div><div class="thinking-status-text">正在思考…<span class="dir">' +
+    escapeHtml(dirText || THINK_DIRS[0]) +
+    "</span></div></div>";
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+function startThinkAnimation(el) {
+  stopThinkAnimation();
+  let i = 0;
+  showThinkingStatus(el, THINK_DIRS[0]);
+  thinkTimer = setInterval(() => {
+    i = (i + 1) % THINK_DIRS.length;
+    const dir = el.querySelector(".thinking-status-text .dir");
+    if (dir) dir.textContent = THINK_DIRS[i];
+  }, 1600);
+}
+
+function stopThinkAnimation() {
+  if (thinkTimer) {
+    clearInterval(thinkTimer);
+    thinkTimer = null;
+  }
+}
+
 function renderAssistantBubble(el, fullText, reasoningExtra) {
+  stopThinkAnimation();
   const parsed = parseThinkAnswer(fullText);
-  const think = ((reasoningExtra || "") + (parsed.think ? (reasoningExtra ? "\n" : "") + parsed.think : "")).trim();
+  const think = (
+    (reasoningExtra || "") +
+    (parsed.think ? (reasoningExtra ? "\n" : "") + parsed.think : "")
+  ).trim();
   el.innerHTML = "";
+  el.classList.remove("streaming");
   if (think) {
     const details = document.createElement("details");
     details.className = "thinking-block";
     details.open = !parsed.answer;
     const sum = document.createElement("summary");
-    sum.textContent = parsed.answer ? "思考过程" : "思考中…";
+    sum.textContent = parsed.answer ? "思考过程" : "正在思考…";
     const body = document.createElement("div");
     body.className = "thinking-content";
     body.textContent = think;
@@ -1242,14 +1422,7 @@ async function apiFetch(pathSuffix, bodyObj, apiKey, provider) {
   }
 }
 
-clearChatBtn.addEventListener("click", () => {
-  if (chatBusy) return;
-  chatHistory = [];
-  pendingAttach = null;
-  renderAttachPreview();
-  chatMessages.innerHTML =
-    '<div class="chat-bubble system">对话已清空。输入问题开始新对话。</div>';
-});
+/* 清空改由侧栏「新建对话」完成 */
 
 async function sendChatMessage() {
   if (chatBusy) return;
@@ -1297,7 +1470,11 @@ async function sendChatMessage() {
   }
   chatHistory.push({ role: "user", content: userContent });
 
+  const empty = document.getElementById("chatEmpty");
+  if (empty) empty.remove();
+
   const assistantEl = appendBubble("assistant", "streaming");
+  startThinkAnimation(assistantEl);
   chatBusy = true;
   sendChatBtn.disabled = true;
 
@@ -1348,12 +1525,15 @@ async function sendChatMessage() {
           if (delta.reasoning_content) reasoning += delta.reasoning_content;
           if (delta.reasoning) reasoning += delta.reasoning;
           if (delta.content) full += delta.content;
-          renderAssistantBubble(assistantEl, full, reasoning);
+          if (full || reasoning) {
+            stopThinkAnimation();
+            renderAssistantBubble(assistantEl, full, reasoning);
+          }
         } catch (_) {}
       }
     }
 
-    assistantEl.classList.remove("streaming");
+    stopThinkAnimation();
     const finalText = full || "";
     renderAssistantBubble(assistantEl, finalText, reasoning);
     const det = assistantEl.querySelector("details.thinking-block");
@@ -1363,9 +1543,11 @@ async function sendChatMessage() {
       assistantEl.textContent = "（模型没有返回内容）";
     } else {
       chatHistory.push({ role: "assistant", content: finalText || reasoning });
+      persistCurrentSession();
     }
   } catch (e) {
     console.error(e);
+    stopThinkAnimation();
     assistantEl.classList.remove("streaming");
     assistantEl.className = "chat-bubble error";
     assistantEl.textContent = "请求失败：" + friendlyError(e.message || e);
@@ -1532,6 +1714,11 @@ chatInput.addEventListener("keydown", (e) => {
     e.preventDefault();
     sendChatMessage();
   }
+});
+
+chatInput.addEventListener("input", () => {
+  chatInput.style.height = "auto";
+  chatInput.style.height = Math.min(120, chatInput.scrollHeight) + "px";
 });
 
 /* 启动 */
