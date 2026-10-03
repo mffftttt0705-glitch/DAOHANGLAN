@@ -285,39 +285,115 @@
     </div>
   </div>
 
-  <!-- 项目管理 -->
+  <!-- 项目管理（Grok 风格多视图） -->
   <div class="modal" id="projectModal" hidden>
     <div class="modal-mask" id="projectMask"></div>
     <div class="modal-panel glass project-panel">
-      <div class="project-header">
-        <h2>项目</h2>
-        <button type="button" class="chat-icon-btn" id="closeProject" title="关闭">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+      <!-- 视图：项目列表 -->
+      <div id="projViewList">
+        <div class="proj-topbar">
+          <button type="button" class="chat-icon-btn" id="closeProject" title="关闭">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <h2>项目</h2>
+          <button type="button" class="chat-icon-btn" id="newProjectBtn" title="新建">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <div class="proj-grid" id="projGrid"></div>
+        <p class="proj-empty" id="projEmpty" hidden>还没有项目，点右上角 + 创建</p>
+      </div>
+
+      <!-- 视图：新建 / 编辑项目 -->
+      <div id="projViewForm" hidden>
+        <div class="proj-topbar">
+          <button type="button" class="chat-icon-btn" id="projFormBack" title="返回">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+          <h2 id="projFormTitle">新建项目</h2>
+          <button type="button" class="btn-text proj-create-btn" id="projFormSave">创建</button>
+        </div>
+        <div class="proj-form-row">
+          <div class="proj-form-icon">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+          </div>
+          <input type="text" id="projFormName" placeholder="项目名称" />
+        </div>
+        <label class="field-label">项目说明（可选）</label>
+        <textarea id="projFormPrefs" rows="4" placeholder="添加你希望 AI 采用的语气、风格以及人设相关的指令。"></textarea>
+        <label class="field-label">项目文件</label>
+        <div class="proj-upload-list" id="projFormFileList"></div>
+        <button type="button" class="proj-upload-btn" id="projFormAddFile">
+          <span>+</span> 添加文件
         </button>
       </div>
-      <p class="modal-hint">类似 Grok 项目：可写偏好，AI 可读写项目内文件（保存在本机）。</p>
-      <div class="project-toolbar">
-        <button type="button" class="btn primary" id="newProjectBtn">新建项目</button>
-        <select id="projectSelect" class="chat-model-select"></select>
-      </div>
-      <label class="field-label">项目偏好 / 说明（会注入对话上下文）</label>
-      <textarea id="projectPrefs" rows="3" placeholder="例如：用中文注释、偏好简洁代码、默认用 vanilla JS…"></textarea>
-      <div class="project-files-head">
-        <span>项目文件</span>
-        <button type="button" class="btn-text" id="addProjectFileBtn">+ 文件</button>
-      </div>
-      <div class="project-file-list" id="projectFileList"></div>
-      <div class="project-editor-wrap" id="projectEditorWrap" hidden>
-        <div class="project-editor-bar">
-          <span id="projectEditPath"></span>
-          <button type="button" class="btn-text" id="saveProjectFileBtn">保存文件</button>
+
+      <!-- 视图：项目详情（对话列表占位 + 菜单） -->
+      <div id="projViewDetail" hidden>
+        <div class="proj-topbar">
+          <button type="button" class="chat-icon-btn" id="projDetailBack" title="返回">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <div class="proj-detail-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 7h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg>
+            <h2 id="projDetailName">项目</h2>
+          </div>
+          <button type="button" class="chat-icon-btn" id="projDetailMore" title="更多">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+          </button>
         </div>
-        <textarea id="projectFileEditor" rows="10" spellcheck="false"></textarea>
+        <div class="proj-detail-actions">
+          <button type="button" class="btn primary" id="projUseChatBtn">在对话中使用</button>
+          <button type="button" class="btn-text" id="projOpenFilesBtn">项目文件</button>
+        </div>
+        <p class="modal-hint" id="projDetailPrefs"></p>
+        <div class="proj-menu" id="projMenu" hidden>
+          <button type="button" data-act="files">项目文件</button>
+          <button type="button" data-act="edit">编辑项目</button>
+          <button type="button" data-act="clone">克隆项目</button>
+          <button type="button" data-act="delete" class="danger">删除项目</button>
+        </div>
       </div>
-      <div class="ui-dialog-actions">
-        <button type="button" class="btn-text" id="deleteProjectBtn">删除项目</button>
-        <button type="button" class="btn primary" id="useProjectBtn">在对话中使用</button>
+
+      <!-- 视图：文件浏览器 -->
+      <div id="projViewFiles" hidden>
+        <div class="proj-topbar">
+          <button type="button" class="chat-icon-btn" id="projFilesBack" title="返回">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+          </button>
+          <h2>文件</h2>
+          <button type="button" class="chat-icon-btn" id="projFilesAdd" title="添加文件">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          </button>
+        </div>
+        <div class="proj-browser" id="projBrowser"></div>
+        <div class="project-editor-wrap" id="projectEditorWrap" hidden>
+          <div class="project-editor-bar">
+            <span id="projectEditPath"></span>
+            <button type="button" class="btn-text" id="saveProjectFileBtn">保存</button>
+          </div>
+          <textarea id="projectFileEditor" rows="12" spellcheck="false"></textarea>
+        </div>
       </div>
+    </div>
+  </div>
+
+  <!-- 代码包查看器 -->
+  <div class="modal" id="codePackModal" hidden>
+    <div class="modal-mask" id="codePackMask"></div>
+    <div class="modal-panel glass codepack-panel">
+      <div class="proj-topbar">
+        <button type="button" class="chat-icon-btn" id="codePackBack" title="关闭">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <h2 id="codePackTitle">代码包</h2>
+        <button type="button" class="btn-text" id="codePackRun" hidden>运行</button>
+      </div>
+      <div class="codepack-layout">
+        <div class="codepack-files" id="codePackFiles"></div>
+        <pre class="codepack-preview" id="codePackPreview"><code></code></pre>
+      </div>
+      <iframe id="codePackFrame" class="codepack-frame" hidden sandbox="allow-scripts"></iframe>
     </div>
   </div>
 
