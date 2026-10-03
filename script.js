@@ -1430,77 +1430,152 @@ function extFromLang(lang) {
 }
 
 /** 把回答渲染成：文本 + 代码块（可下载）+ 项目文件补丁（可应用） */
-function renderRichAnswer(container, text) {
+function extractCodeFiles(text) {
   const src = String(text || "");
-  // ```lang or ```file:path
   const re = /```([^\n`]*)\n([\s\S]*?)```/g;
-  let last = 0;
+  const files = [];
   let m;
   let idx = 0;
+  let stripped = src;
   while ((m = re.exec(src)) !== null) {
-    if (m.index > last) {
-      const t = document.createElement("div");
-      t.style.whiteSpace = "pre-wrap";
-      t.textContent = src.slice(last, m.index);
-      container.appendChild(t);
-    }
     const header = (m[1] || "").trim();
     const code = m[2].replace(/\n$/, "");
     const isFile = /^file\s*:/i.test(header);
-    const filePath = isFile ? header.replace(/^file\s*:/i, "").trim() : "";
+    const filePath = isFile
+      ? header.replace(/^file\s*:/i, "").trim()
+      : "code-" + ++idx + "." + extFromLang(header.split(/\s+/)[0] || "");
     const lang = isFile ? "" : header.split(/\s+/)[0] || "";
-
-    const wrap = document.createElement("div");
-    wrap.className = "code-block-wrap";
-    const bar = document.createElement("div");
-    bar.className = "code-block-bar";
-    const label = document.createElement("span");
-    label.textContent = isFile ? "文件 · " + filePath : lang || "code";
-    bar.appendChild(label);
-    const actions = document.createElement("div");
-    actions.style.display = "flex";
-    actions.style.gap = "0.3rem";
-
-    const dl = document.createElement("button");
-    dl.type = "button";
-    dl.textContent = "下载文件";
-    const fname = isFile
-      ? filePath.split("/").pop() || "file.txt"
-      : "code-" + ++idx + "." + extFromLang(lang);
-    dl.onclick = () => downloadTextFile(fname, code);
-    actions.appendChild(dl);
-
-    if (isFile && activeProjectId) {
-      const applyBtn = document.createElement("button");
-      applyBtn.type = "button";
-      applyBtn.textContent = "写入项目";
-      applyBtn.onclick = () => {
-        applyFileToProject(filePath, code);
-      };
-      actions.appendChild(applyBtn);
-    }
-
-    bar.appendChild(actions);
-    wrap.appendChild(bar);
-    const pre = document.createElement("pre");
-    const codeEl = document.createElement("code");
-    codeEl.textContent = code;
-    pre.appendChild(codeEl);
-    wrap.appendChild(pre);
-    container.appendChild(wrap);
-
-    last = m.index + m[0].length;
+    files.push({ path: filePath, content: code, lang });
   }
-  if (last < src.length) {
+  // 去掉代码块后的说明文字
+  stripped = src.replace(re, "").trim();
+  return { files, text: stripped };
+}
+
+/** 把回答渲染成：说明文字 + 代码包卡片（长代码不再直接铺开） */
+function renderRichAnswer(container, text) {
+  const { files, text: rest } = extractCodeFiles(text);
+  if (rest) {
     const t = document.createElement("div");
     t.style.whiteSpace = "pre-wrap";
-    t.textContent = src.slice(last);
+    t.textContent = rest;
     container.appendChild(t);
   }
-  if (!container.childNodes.length) {
-    container.textContent = src;
+  if (files.length) {
+    const card = document.createElement("button");
+    card.type = "button";
+    card.className = "code-pack-card";
+    card.innerHTML =
+      '<div class="code-pack-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 7h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg></div>' +
+      '<div class="code-pack-info"><strong>代码包</strong><span>' +
+      files.length +
+      " 个文件 · 点击查看 / 运行</span></div>";
+    card.onclick = () => openCodePack(files);
+    container.appendChild(card);
+
+    // 若有活跃项目，提供一键全部写入
+    if (activeProjectId) {
+      const bar = document.createElement("div");
+      bar.className = "file-patch-bar";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = "全部写入当前项目";
+      btn.onclick = () => {
+        files.forEach((f) => applyFileToProject(f.path, f.content));
+        void uiAlert("已写入 " + files.length + " 个文件到项目");
+      };
+      bar.appendChild(btn);
+      container.appendChild(bar);
+    }
+  } else if (!rest) {
+    container.textContent = text || "";
   }
 }
+
+let codePackFilesCache = [];
+function openCodePack(files) {
+  codePackFilesCache = files || [];
+  const modal = document.getElementById("codePackModal");
+  const list = document.getElementById("codePackFiles");
+  const preview = document.getElementById("codePackPreview").querySelector("code");
+  const runBtn = document.getElementById("codePackRun");
+  const frame = document.getElementById("codePackFrame");
+  frame.hidden = true;
+  frame.srcdoc = "";
+  list.innerHTML = "";
+  document.getElementById("codePackTitle").textContent =
+    "代码包 · " + codePackFilesCache.length + " 个文件";
+
+  const showFile = (i) => {
+    list.querySelectorAll(".codepack-file-btn").forEach((b, j) => {
+      b.classList.toggle("active", j === i);
+    });
+    const f = codePackFilesCache[i];
+    preview.textContent = f.content;
+    const canRun =
+      /\.(html?|htm)$/i.test(f.path) ||
+      /html/i.test(f.lang) ||
+      (codePackFilesCache.length === 1 && /html/i.test(f.content.slice(0, 200)));
+    runBtn.hidden = !canRun && !codePackFilesCache.some((x) => /\.html?$/i.test(x.path));
+    runBtn.dataset.idx = String(i);
+  };
+
+  codePackFilesCache.forEach((f, i) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "codepack-file-btn" + (i === 0 ? " active" : "");
+    b.textContent = f.path;
+    b.onclick = () => showFile(i);
+    list.appendChild(b);
+  });
+  if (codePackFilesCache.length) showFile(0);
+  modal.hidden = false;
+}
+
+document.getElementById("codePackBack").addEventListener("click", () => {
+  document.getElementById("codePackModal").hidden = true;
+});
+document.getElementById("codePackMask").addEventListener("click", () => {
+  document.getElementById("codePackModal").hidden = true;
+});
+document.getElementById("codePackRun").addEventListener("click", () => {
+  const frame = document.getElementById("codePackFrame");
+  // 优先找 html
+  let htmlFile = codePackFilesCache.find((f) => /\.html?$/i.test(f.path));
+  if (!htmlFile) {
+    const idx = Number(document.getElementById("codePackRun").dataset.idx || 0);
+    htmlFile = codePackFilesCache[idx];
+  }
+  let html = htmlFile ? htmlFile.content : "";
+  // 把同包 css/js 内联进去便于预览
+  if (html) {
+    codePackFilesCache.forEach((f) => {
+      if (/\.css$/i.test(f.path)) {
+        html = html.replace(
+          /<\/head>/i,
+          "<style>" + f.content + "</style></head>"
+        );
+        if (!/<\/head>/i.test(html)) html = "<style>" + f.content + "</style>" + html;
+      }
+      if (/\.js$/i.test(f.path) && !/\.json$/i.test(f.path)) {
+        html = html.replace(
+          /<\/body>/i,
+          "<script>" + f.content + "</script></body>"
+        );
+        if (!/<\/body>/i.test(html))
+          html = html + "<script>" + f.content + "</" + "script>";
+      }
+    });
+  } else {
+    html =
+      "<pre style='white-space:pre-wrap;font-family:monospace;padding:12px'>" +
+      escapeHtml(codePackFilesCache.map((f) => f.content).join("\n\n")) +
+      "</pre>";
+  }
+  frame.hidden = false;
+  frame.srcdoc = html;
+});
+
 
 function renderAssistantBubble(el, fullText, reasoningExtra) {
   stopThinkAnimation();
@@ -2000,11 +2075,13 @@ chatInput.addEventListener("input", () => {
 });
 
 
-/* ========== 项目管理（Grok 风格本地项目） ========== */
+/* ========== 项目管理（Grok 风格） ========== */
 const PROJECTS_KEY = "ai_projects_v1";
 const ACTIVE_PROJECT_KEY = "ai_active_project_v1";
 let activeProjectId = localStorage.getItem(ACTIVE_PROJECT_KEY) || null;
 let editingFilePath = null;
+let formDraftFiles = [];
+let viewingProjectId = null;
 
 function loadProjects() {
   try {
@@ -2032,7 +2109,7 @@ function setActiveProject(id) {
 
 function updateProjectBadge() {
   const sel = document.getElementById("chatModelSelect");
-  if (!sel) return;
+  if (!sel || !sel.parentElement) return;
   let badge = document.getElementById("chatProjectBadge");
   const proj = getActiveProject();
   if (proj) {
@@ -2043,7 +2120,6 @@ function updateProjectBadge() {
       sel.parentElement.appendChild(badge);
     }
     badge.textContent = "项目 · " + proj.name;
-    badge.title = "点击打开项目管理";
     badge.onclick = () => openProjectModal();
   } else if (badge) {
     badge.remove();
@@ -2058,23 +2134,18 @@ function buildProjectSystemExtra() {
     proj.name +
     "】\n用户偏好：\n" +
     (proj.preferences || "（无）") +
-    "\n\n项目文件列表与内容：\n";
+    "\n\n项目文件：\n";
   (proj.files || []).forEach((f) => {
-    extra +=
-      "\n--- file:" +
-      f.path +
-      " ---\n" +
-      (f.content || "") +
-      "\n";
+    extra += "\n--- file:" + f.path + " ---\n" + (f.content || "") + "\n";
   });
   extra +=
-    "\n若需修改或新建文件，请用如下格式输出完整文件内容：\n```file:相对路径\n文件全文\n```\n用户可一键写入项目。";
+    "\n修改或新建文件时，请用：\n```file:相对路径\n完整内容\n```\n不要把大段代码直接堆在回复里，用 file: 代码块即可。";
   return extra;
 }
 
 function applyFileToProject(path, content) {
   if (!activeProjectId) {
-    void uiAlert("请先在菜单中创建并启用一个项目");
+    void uiAlert("请先启用一个项目");
     return;
   }
   const list = loadProjects();
@@ -2084,69 +2155,68 @@ function applyFileToProject(path, content) {
   const existing = proj.files.find((f) => f.path === path);
   if (existing) existing.content = content;
   else proj.files.push({ path, content });
+  proj.updated = Date.now();
   saveProjects(list);
-  void uiAlert("已写入项目文件：" + path);
-  if (!document.getElementById("projectModal").hidden) renderProjectUI();
 }
 
-function renderProjectUI() {
+function formatRelTime(ts) {
+  if (!ts) return "";
+  const d = Date.now() - ts;
+  if (d < 60000) return "刚刚";
+  if (d < 3600000) return Math.floor(d / 60000) + " 分钟前";
+  if (d < 86400000) return Math.floor(d / 3600000) + " 小时前";
+  if (d < 86400000 * 7) return Math.floor(d / 86400000) + " 天前";
+  const dt = new Date(ts);
+  return dt.getMonth() + 1 + "月" + dt.getDate() + "日";
+}
+
+function showProjView(name) {
+  ["projViewList", "projViewForm", "projViewDetail", "projViewFiles"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.hidden = id !== name;
+  });
+  const menu = document.getElementById("projMenu");
+  if (menu) menu.hidden = true;
+}
+
+function renderProjGrid() {
+  const grid = document.getElementById("projGrid");
+  const empty = document.getElementById("projEmpty");
   const list = loadProjects();
-  const select = document.getElementById("projectSelect");
-  const prefs = document.getElementById("projectPrefs");
-  const fileList = document.getElementById("projectFileList");
-  select.innerHTML = "";
-  if (!list.length) {
-    select.innerHTML = '<option value="">暂无项目</option>';
-    prefs.value = "";
-    fileList.innerHTML = "";
-    document.getElementById("projectEditorWrap").hidden = true;
-    return;
-  }
+  grid.innerHTML = "";
+  empty.hidden = list.length > 0;
   list.forEach((p) => {
-    const opt = document.createElement("option");
-    opt.value = p.id;
-    opt.textContent = p.name + (p.id === activeProjectId ? "（使用中）" : "");
-    select.appendChild(opt);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className =
+      "proj-card" + (p.id === activeProjectId ? " active-proj" : "");
+    btn.innerHTML =
+      '<div class="proj-card-icon"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"/></svg></div>' +
+      '<div class="proj-card-name">' +
+      escapeHtml(p.name) +
+      '</div><div class="proj-card-meta">修改于: ' +
+      formatRelTime(p.updated || 0) +
+      "</div>";
+    btn.onclick = () => openProjDetail(p.id);
+    grid.appendChild(btn);
   });
-  const curId = select.value || list[0].id;
-  select.value = curId;
-  const proj = list.find((p) => p.id === curId);
-  prefs.value = proj.preferences || "";
-  fileList.innerHTML = "";
-  (proj.files || []).forEach((f) => {
-    const row = document.createElement("div");
-    row.className =
-      "project-file-item" + (editingFilePath === f.path ? " active" : "");
-    row.innerHTML =
-      "<span>" +
-      escapeHtml(f.path) +
-      '</span><button type="button" class="del-file" title="删除">×</button>';
-    row.querySelector("span").onclick = () => {
-      editingFilePath = f.path;
-      document.getElementById("projectEditorWrap").hidden = false;
-      document.getElementById("projectEditPath").textContent = f.path;
-      document.getElementById("projectFileEditor").value = f.content || "";
-      renderProjectUI();
-    };
-    row.querySelector(".del-file").onclick = async (e) => {
-      e.stopPropagation();
-      const ok = await uiConfirm("删除文件 " + f.path + "？");
-      if (!ok) return;
-      proj.files = proj.files.filter((x) => x.path !== f.path);
-      saveProjects(list);
-      if (editingFilePath === f.path) {
-        editingFilePath = null;
-        document.getElementById("projectEditorWrap").hidden = true;
-      }
-      renderProjectUI();
-    };
-    fileList.appendChild(row);
-  });
+}
+
+function openProjDetail(id) {
+  viewingProjectId = id;
+  const p = loadProjects().find((x) => x.id === id);
+  if (!p) return;
+  document.getElementById("projDetailName").textContent = p.name;
+  document.getElementById("projDetailPrefs").textContent = p.preferences
+    ? "偏好：" + p.preferences
+    : "暂无项目说明";
+  showProjView("projViewDetail");
 }
 
 function openProjectModal() {
   document.getElementById("projectModal").hidden = false;
-  renderProjectUI();
+  showProjView("projViewList");
+  renderProjGrid();
 }
 
 function closeProjectModal() {
@@ -2160,101 +2230,219 @@ document.getElementById("openProjectsBtn").addEventListener("click", () => {
 document.getElementById("closeProject").addEventListener("click", closeProjectModal);
 document.getElementById("projectMask").addEventListener("click", closeProjectModal);
 
-document.getElementById("newProjectBtn").addEventListener("click", async () => {
-  const name = await uiPrompt("项目名称", "我的项目", "新建项目");
-  if (!name) return;
-  const list = loadProjects();
-  const id = "p_" + Date.now().toString(36);
-  list.unshift({
-    id,
-    name: name.trim(),
-    preferences: "",
-    files: [{ path: "README.md", content: "# " + name.trim() + "\n\n在此写项目说明。\n" }],
+document.getElementById("newProjectBtn").addEventListener("click", () => {
+  formDraftFiles = [];
+  viewingProjectId = null;
+  document.getElementById("projFormTitle").textContent = "新建项目";
+  document.getElementById("projFormSave").textContent = "创建";
+  document.getElementById("projFormName").value = "";
+  document.getElementById("projFormPrefs").value = "";
+  renderFormFiles();
+  showProjView("projViewForm");
+});
+
+document.getElementById("projFormBack").addEventListener("click", () => {
+  showProjView("projViewList");
+  renderProjGrid();
+});
+
+function renderFormFiles() {
+  const box = document.getElementById("projFormFileList");
+  box.innerHTML = "";
+  formDraftFiles.forEach((f, i) => {
+    const row = document.createElement("div");
+    row.className = "proj-upload-item";
+    row.innerHTML =
+      "<span>" +
+      escapeHtml(f.path) +
+      '</span><button type="button">×</button>';
+    row.querySelector("button").onclick = () => {
+      formDraftFiles.splice(i, 1);
+      renderFormFiles();
+    };
+    box.appendChild(row);
   });
-  saveProjects(list);
-  setActiveProject(id);
-  renderProjectUI();
-});
+}
 
-document.getElementById("projectSelect").addEventListener("change", () => {
-  editingFilePath = null;
-  document.getElementById("projectEditorWrap").hidden = true;
-  renderProjectUI();
-});
-
-document.getElementById("projectPrefs").addEventListener("change", () => {
-  const list = loadProjects();
-  const id = document.getElementById("projectSelect").value;
-  const proj = list.find((p) => p.id === id);
-  if (!proj) return;
-  proj.preferences = document.getElementById("projectPrefs").value;
-  saveProjects(list);
-});
-
-document.getElementById("addProjectFileBtn").addEventListener("click", async () => {
-  const list = loadProjects();
-  const id = document.getElementById("projectSelect").value;
-  const proj = list.find((p) => p.id === id);
-  if (!proj) {
-    void uiAlert("请先新建项目");
-    return;
-  }
-  const path = await uiPrompt("文件路径，例如 src/main.js", "notes.md", "添加文件");
+document.getElementById("projFormAddFile").addEventListener("click", async () => {
+  const path = await uiPrompt("文件名（如 index.html、src/app.js）", "README.md", "添加文件");
   if (!path) return;
-  if (!proj.files) proj.files = [];
-  if (proj.files.some((f) => f.path === path)) {
-    void uiAlert("文件已存在");
+  const content = await uiPrompt("文件内容（可先留空稍后编辑）", "", "文件内容");
+  formDraftFiles.push({ path: path.trim(), content: content || "" });
+  renderFormFiles();
+});
+
+document.getElementById("projFormSave").addEventListener("click", async () => {
+  const name = document.getElementById("projFormName").value.trim();
+  if (!name) {
+    void uiAlert("请填写项目名称");
     return;
   }
-  proj.files.push({ path: path.trim(), content: "" });
+  const prefs = document.getElementById("projFormPrefs").value;
+  const list = loadProjects();
+  if (viewingProjectId) {
+    const p = list.find((x) => x.id === viewingProjectId);
+    if (p) {
+      p.name = name;
+      p.preferences = prefs;
+      p.updated = Date.now();
+      if (formDraftFiles.length) {
+        if (!p.files) p.files = [];
+        formDraftFiles.forEach((f) => {
+          const ex = p.files.find((x) => x.path === f.path);
+          if (ex) ex.content = f.content;
+          else p.files.push(f);
+        });
+      }
+    }
+  } else {
+    const id = "p_" + Date.now().toString(36);
+    list.unshift({
+      id,
+      name,
+      preferences: prefs,
+      files: formDraftFiles.length
+        ? formDraftFiles.slice()
+        : [{ path: "README.md", content: "# " + name + "\n" }],
+      updated: Date.now(),
+    });
+    viewingProjectId = id;
+  }
   saveProjects(list);
-  editingFilePath = path.trim();
-  document.getElementById("projectEditorWrap").hidden = false;
-  document.getElementById("projectEditPath").textContent = path.trim();
-  document.getElementById("projectFileEditor").value = "";
-  renderProjectUI();
+  openProjDetail(viewingProjectId);
+});
+
+document.getElementById("projDetailBack").addEventListener("click", () => {
+  showProjView("projViewList");
+  renderProjGrid();
+});
+
+document.getElementById("projDetailMore").addEventListener("click", () => {
+  const menu = document.getElementById("projMenu");
+  menu.hidden = !menu.hidden;
+});
+
+document.getElementById("projMenu").addEventListener("click", async (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  const act = btn.dataset.act;
+  const list = loadProjects();
+  const p = list.find((x) => x.id === viewingProjectId);
+  if (!p) return;
+  document.getElementById("projMenu").hidden = true;
+
+  if (act === "files") {
+    openProjFiles();
+  } else if (act === "edit") {
+    formDraftFiles = [];
+    document.getElementById("projFormTitle").textContent = "编辑项目";
+    document.getElementById("projFormSave").textContent = "保存";
+    document.getElementById("projFormName").value = p.name;
+    document.getElementById("projFormPrefs").value = p.preferences || "";
+    renderFormFiles();
+    showProjView("projViewForm");
+  } else if (act === "clone") {
+    const copy = JSON.parse(JSON.stringify(p));
+    copy.id = "p_" + Date.now().toString(36);
+    copy.name = p.name + " 副本";
+    copy.updated = Date.now();
+    list.unshift(copy);
+    saveProjects(list);
+    openProjDetail(copy.id);
+  } else if (act === "delete") {
+    const ok = await uiConfirm("确定删除项目「" + p.name + "」？");
+    if (!ok) return;
+    saveProjects(list.filter((x) => x.id !== p.id));
+    if (activeProjectId === p.id) setActiveProject(null);
+    showProjView("projViewList");
+    renderProjGrid();
+  }
+});
+
+document.getElementById("projUseChatBtn").addEventListener("click", () => {
+  setActiveProject(viewingProjectId);
+  closeProjectModal();
+  void uiAlert("已启用项目，对话会带上项目偏好与文件");
+});
+
+document.getElementById("projOpenFilesBtn").addEventListener("click", openProjFiles);
+
+function openProjFiles() {
+  showProjView("projViewFiles");
+  document.getElementById("projectEditorWrap").hidden = true;
+  renderProjBrowser();
+}
+
+function renderProjBrowser() {
+  const box = document.getElementById("projBrowser");
+  const p = loadProjects().find((x) => x.id === viewingProjectId);
+  box.innerHTML = "";
+  if (!p) return;
+  (p.files || []).forEach((f) => {
+    const row = document.createElement("div");
+    row.className = "proj-browser-row";
+    const size = new Blob([f.content || ""]).size;
+    row.innerHTML =
+      '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>' +
+      "<span>" +
+      escapeHtml(f.path) +
+      '</span><span class="meta">' +
+      (size < 1024 ? size + " B" : (size / 1024).toFixed(1) + " KB") +
+      '</span><div class="row-acts"><button type="button" data-a="dl" title="下载">↓</button><button type="button" data-a="del" title="删除">×</button></div>';
+    row.querySelector("span").onclick = () => {
+      editingFilePath = f.path;
+      document.getElementById("projectEditorWrap").hidden = false;
+      document.getElementById("projectEditPath").textContent = f.path;
+      document.getElementById("projectFileEditor").value = f.content || "";
+    };
+    row.querySelector('[data-a="dl"]').onclick = (e) => {
+      e.stopPropagation();
+      downloadTextFile(f.path.split("/").pop(), f.content || "");
+    };
+    row.querySelector('[data-a="del"]').onclick = async (e) => {
+      e.stopPropagation();
+      const ok = await uiConfirm("删除 " + f.path + "？");
+      if (!ok) return;
+      p.files = p.files.filter((x) => x.path !== f.path);
+      p.updated = Date.now();
+      const all = loadProjects();
+      const i = all.findIndex((x) => x.id === p.id);
+      if (i >= 0) all[i] = p;
+      saveProjects(all);
+      renderProjBrowser();
+    };
+    box.appendChild(row);
+  });
+}
+
+document.getElementById("projFilesBack").addEventListener("click", () => {
+  openProjDetail(viewingProjectId);
+});
+
+document.getElementById("projFilesAdd").addEventListener("click", async () => {
+  const path = await uiPrompt("文件名", "new-file.txt", "新建文件");
+  if (!path) return;
+  const content = await uiPrompt("文件内容", "", "内容");
+  const list = loadProjects();
+  const p = list.find((x) => x.id === viewingProjectId);
+  if (!p) return;
+  if (!p.files) p.files = [];
+  p.files.push({ path: path.trim(), content: content || "" });
+  p.updated = Date.now();
+  saveProjects(list);
+  renderProjBrowser();
 });
 
 document.getElementById("saveProjectFileBtn").addEventListener("click", () => {
   const list = loadProjects();
-  const id = document.getElementById("projectSelect").value;
-  const proj = list.find((p) => p.id === id);
-  if (!proj || !editingFilePath) return;
-  const f = proj.files.find((x) => x.path === editingFilePath);
+  const p = list.find((x) => x.id === viewingProjectId);
+  if (!p || !editingFilePath) return;
+  const f = p.files.find((x) => x.path === editingFilePath);
   if (f) f.content = document.getElementById("projectFileEditor").value;
+  p.updated = Date.now();
   saveProjects(list);
-  void uiAlert("文件已保存");
-});
-
-document.getElementById("useProjectBtn").addEventListener("click", () => {
-  const id = document.getElementById("projectSelect").value;
-  if (!id) {
-    void uiAlert("没有可使用的项目");
-    return;
-  }
-  // 同步偏好
-  const list = loadProjects();
-  const proj = list.find((p) => p.id === id);
-  if (proj) {
-    proj.preferences = document.getElementById("projectPrefs").value;
-    saveProjects(list);
-  }
-  setActiveProject(id);
-  closeProjectModal();
-  void uiAlert("已启用项目，对话时会带上项目偏好与文件");
-});
-
-document.getElementById("deleteProjectBtn").addEventListener("click", async () => {
-  const id = document.getElementById("projectSelect").value;
-  if (!id) return;
-  const ok = await uiConfirm("确定删除该项目？不可恢复。");
-  if (!ok) return;
-  let list = loadProjects().filter((p) => p.id !== id);
-  saveProjects(list);
-  if (activeProjectId === id) setActiveProject(null);
-  editingFilePath = null;
-  document.getElementById("projectEditorWrap").hidden = true;
-  renderProjectUI();
+  void uiAlert("已保存 " + editingFilePath);
+  renderProjBrowser();
 });
 
 
