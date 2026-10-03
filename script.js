@@ -928,9 +928,8 @@ const AI_PROVIDERS = {
     base: "https://apihub.agnes-ai.com/v1",
     model: "agnes-2.0-flash",
     models: [
-      { id: "agnes-2.0-flash", label: "Agnes 2.0 Flash" },
+      { id: "agnes-2.0-flash", label: "Agnes 2.0 Flash（对话）" },
       { id: "agnes-video-2.5-flash", label: "Agnes Video 2.5 Flash（生视频）", video: true },
-      { id: "agnes-video-v2.0", label: "Agnes Video 2.0（生视频）", video: true },
     ],
     tip: 'Key 在 <a href="https://platform.agnes-ai.com" target="_blank" rel="noopener">Agnes 平台</a> 免费注册。对话用 Flash，生视频请点「生视频」或选 Video 模型后发送。',
     system: THINK_SYSTEM,
@@ -2393,10 +2392,8 @@ async function ensureAgnesKey() {
 }
 
 function pickVideoModelId() {
-  const mid = getSelectedModelId();
-  if (/video/i.test(mid)) return mid;
-  const p = AI_PROVIDERS.agnes || {};
-  return p.videoModel || "agnes-video-2.5-flash";
+  // v2.0 已于 2026-09-25 下线，统一 2.5 Flash
+  return "agnes-video-2.5-flash";
 }
 
 function extractErrMsg(data, fallback) {
@@ -2436,11 +2433,7 @@ async function runAgnesVideoGeneration(prompt, imageDataUrl) {
   chatBusy = true;
   sendChatBtn.disabled = true;
 
-  const modelsToTry = [
-    pickVideoModelId(),
-    "agnes-video-2.5-flash",
-    "agnes-video-v2.0",
-  ].filter((v, i, a) => a.indexOf(v) === i);
+  const modelsToTry = ["agnes-video-2.5-flash"];
 
   try {
     let createData = null;
@@ -2453,21 +2446,13 @@ async function runAgnesVideoGeneration(prompt, imageDataUrl) {
       const body = {
         action: "create",
         apiKey,
-        model,
+        model: "agnes-video-2.5-flash",
         prompt,
         seconds: "5",
         size: "720P",
-        aspect_ratio: "16:9",
-        height: 704,
-        width: 1280,
-        num_frames: 121,
-        frame_rate: 24,
+        aspect_ratio: imageDataUrl ? "1:1" : "16:9",
       };
-      // 图生视频：Agnes 通常需要公网 URL；dataURL 可能失败，仍尝试
-      if (imageDataUrl) {
-        if (imageDataUrl.startsWith("http")) body.image = imageDataUrl;
-        else body.image = imageDataUrl; // 部分网关接受 data URL
-      }
+      if (imageDataUrl) body.image = imageDataUrl;
       const createRes = await fetch("/api/video", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2609,11 +2594,11 @@ async function runAgnesVideoGeneration(prompt, imageDataUrl) {
     assistantEl.classList.remove("streaming");
     assistantEl.className = "chat-bubble error";
     let msg = String(e.message || e);
-    if (/1015/.test(msg)) {
+    if (/1015|下线|retired|v2\.0/i.test(msg)) {
       msg =
-        "参数或队列异常（1015）。已自动换模型重试仍失败时：① 简化中文/英文描述 ② 去掉透明背景等特殊要求 ③ 稍后再试。原始：" +
-        msg.slice(0, 120);
-    } else if (/401|unauthorized|api.?key|令牌|鉴权/i.test(msg)) {
+        "Video 2.0 已下线或参数无效。已改用 Video 2.5 Flash。" +
+        "若仍失败：① 对话模型请选「Agnes 2.0 Flash」勿选 Video ② 附图需能上传到公网（代理会自动上传）③ 描述勿要求透明背景 ④ 错峰重试。";
+    } else if (/401|unauthorized|api.?key|令牌|鉴权|无效/i.test(msg)) {
       msg = "Agnes Key 无效，请在 API 设置中重新保存 platform.agnes-ai.com 的 Key。";
     } else if (/queue|503|full|限流|429/i.test(msg)) {
       msg = "视频队列繁忙或限流，请等待 1～5 分钟后再试。";
