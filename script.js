@@ -180,11 +180,11 @@ async function saveProfile(data, { silent } = {}) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || "HTTP " + res.status);
     }
-    if (!silent) alert("已保存到云端，所有人刷新后可见");
+    if (!silent) void uiAlert("已保存到云端，所有人刷新后可见");
   } catch (e) {
     console.error(e);
     if (!silent) {
-      alert(
+      void uiAlert(
         "本地已保存，但云端同步失败：\n" +
           (e.message || e) +
           "\n请确认已正确绑定 KV 并重新部署"
@@ -262,6 +262,70 @@ function escapeHtml(s) {
     .replace(/"/g, "&quot;");
 }
 
+/* ========== 自定义弹窗（替代 alert/confirm/prompt） ========== */
+function showUiDialog({ title = "提示", message = "", input = false, inputValue = "", showCancel = false, okText = "确定", cancelText = "取消" } = {}) {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("uiDialog");
+    const titleEl = document.getElementById("uiDialogTitle");
+    const msgEl = document.getElementById("uiDialogMessage");
+    const inputEl = document.getElementById("uiDialogInput");
+    const okBtn = document.getElementById("uiDialogOk");
+    const cancelBtn = document.getElementById("uiDialogCancel");
+    const mask = document.getElementById("uiDialogMask");
+
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    okBtn.textContent = okText;
+    cancelBtn.textContent = cancelText;
+    cancelBtn.hidden = !showCancel;
+
+    if (input) {
+      inputEl.hidden = false;
+      inputEl.value = inputValue || "";
+      inputEl.placeholder = message || "";
+    } else {
+      inputEl.hidden = true;
+      inputEl.value = "";
+    }
+
+    modal.hidden = false;
+
+    const cleanup = (result) => {
+      modal.hidden = true;
+      okBtn.onclick = null;
+      cancelBtn.onclick = null;
+      mask.onclick = null;
+      resolve(result);
+    };
+
+    okBtn.onclick = () => cleanup(input ? inputEl.value : true);
+    cancelBtn.onclick = () => cleanup(input ? null : false);
+    mask.onclick = () => cleanup(input ? null : false);
+    if (input) {
+      setTimeout(() => inputEl.focus(), 50);
+      inputEl.onkeydown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          cleanup(inputEl.value);
+        }
+      };
+    }
+  });
+}
+
+function uiAlert(message, title = "提示") {
+  return showUiDialog({ title, message, showCancel: false });
+}
+
+function uiConfirm(message, title = "确认") {
+  return showUiDialog({ title, message, showCancel: true, okText: "确定", cancelText: "取消" });
+}
+
+function uiPrompt(message, defaultValue = "", title = "输入") {
+  return showUiDialog({ title, message, input: true, inputValue: defaultValue, showCancel: true, okText: "确定", cancelText: "取消" });
+}
+
+
 bgListEl.addEventListener("click", (e) => {
   const btn = e.target.closest("button[data-act]");
   if (!btn) return;
@@ -305,25 +369,25 @@ addBgBtn.addEventListener("click", async () => {
 
   if (bgFileInput.files[0]) {
     if (type === "video") {
-      alert("视频请使用网络链接，不支持本地文件转 base64（体积太大）");
+      void uiAlert("视频请使用网络链接，不支持本地文件转 base64（体积太大）");
       return;
     }
     try {
       url = await fileToDataURL(bgFileInput.files[0]);
     } catch (e) {
-      alert(e.message || "图片读取失败");
+      void uiAlert(e.message || "图片读取失败");
       return;
     }
   }
 
   if (!url) {
-    alert("请填写图片/视频链接，或选择本地图片");
+    void uiAlert("请填写图片/视频链接，或选择本地图片");
     return;
   }
 
   if (type === "video" && !isVideoUrl(url) && !url.includes("video")) {
-    // 允许，但提示
-    if (!confirm("链接看起来不像视频文件，仍要添加为视频背景吗？")) return;
+    const ok = await uiConfirm("链接看起来不像视频文件，仍要添加为视频背景吗？");
+    if (!ok) return;
   }
 
   if (!label) {
@@ -364,7 +428,7 @@ pwdInput.addEventListener("input", () => {
 
 saveBtn.addEventListener("click", async () => {
   if (pwdInput.value !== PASSWORD) {
-    alert("密码错误");
+    void uiAlert("密码错误");
     return;
   }
 
@@ -375,7 +439,7 @@ saveBtn.addEventListener("click", async () => {
     try {
       avatarUrl = await fileToDataURL(avatarFileInput.files[0]);
     } catch (e) {
-      alert(e.message || "头像读取失败");
+      void uiAlert(e.message || "头像读取失败");
       return;
     }
   } else if (!avatarUrl && prev.avatarUrl) {
@@ -395,7 +459,7 @@ saveBtn.addEventListener("click", async () => {
     closeSettings();
   } catch (e) {
     console.error(e);
-    alert("保存失败：" + (e.message || e));
+    void uiAlert("保存失败：" + (e.message || e));
   }
 });
 
@@ -847,7 +911,7 @@ convertBtn.addEventListener("click", async () => {
       tip = "未能提取到声音，请确认视频有音轨，并允许网站播放声音。";
     }
     progressText.textContent = tip;
-    alert(tip);
+    void uiAlert(tip);
   } finally {
     convertBtn.disabled = false;
   }
@@ -999,6 +1063,12 @@ function applyProviderUI() {
   chatApiKeyInput.value = getChatApiKey();
   chatApiKeyInput.placeholder = "粘贴 " + p.name + " 的 API Key";
   chatKeyTip.innerHTML = p.tip + " Key 只存在本机。";
+  // 无生图能力的模型隐藏生图按钮
+  const genImg = document.getElementById("chatGenImage");
+  const genVid = document.getElementById("chatGenVideo");
+  if (genImg) genImg.hidden = !p.imageGen;
+  // 生视频为提示词辅助，所有模型可用；也可统一保留
+  if (genVid) genVid.hidden = false;
 }
 
 function showEmptyState() {
@@ -1150,14 +1220,14 @@ chatModelSelect.addEventListener("change", () => {
 saveChatKeyBtn.addEventListener("click", () => {
   const key = chatApiKeyInput.value.trim();
   if (!key) {
-    alert("请先粘贴 API Key");
+    void uiAlert("请先粘贴 API Key");
     return;
   }
   const map = loadChatKeys();
   map[getCurrentProviderId()] = key;
   saveChatKeys(map);
   chatSettings.hidden = true;
-  alert(getProvider().name + " 的 API Key 已保存到本机");
+  void uiAlert(getProvider().name + " 的 API Key 已保存到本机");
 });
 
 /** 待发送附件：{ type:'image'|'file', name, dataUrl?, text?, mime? } */
@@ -1235,7 +1305,7 @@ chatImageInput.addEventListener("change", async () => {
     pendingAttach = { type: "image", name: file.name, dataUrl, mime: file.type };
     renderAttachPreview();
   } catch (e) {
-    alert(e.message || "图片读取失败");
+    void uiAlert(e.message || "图片读取失败");
   }
 });
 
@@ -1248,7 +1318,7 @@ chatFileInput.addEventListener("change", async () => {
     pendingAttach = { type: "file", name: file.name, text };
     renderAttachPreview();
   } catch (e) {
-    alert(e.message || "文件读取失败");
+    void uiAlert(e.message || "文件读取失败");
   }
 });
 
@@ -1322,6 +1392,116 @@ function stopThinkAnimation() {
   }
 }
 
+function downloadTextFile(filename, content) {
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename || "code.txt";
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+function extFromLang(lang) {
+  const map = {
+    js: "js",
+    javascript: "js",
+    ts: "ts",
+    typescript: "ts",
+    py: "py",
+    python: "py",
+    html: "html",
+    css: "css",
+    json: "json",
+    md: "md",
+    markdown: "md",
+    sh: "sh",
+    bash: "sh",
+    sql: "sql",
+    java: "java",
+    go: "go",
+    rust: "rs",
+    c: "c",
+    cpp: "cpp",
+    xml: "xml",
+    yaml: "yml",
+    yml: "yml",
+  };
+  return map[String(lang || "").toLowerCase()] || "txt";
+}
+
+/** 把回答渲染成：文本 + 代码块（可下载）+ 项目文件补丁（可应用） */
+function renderRichAnswer(container, text) {
+  const src = String(text || "");
+  // ```lang or ```file:path
+  const re = /```([^\n`]*)\n([\s\S]*?)```/g;
+  let last = 0;
+  let m;
+  let idx = 0;
+  while ((m = re.exec(src)) !== null) {
+    if (m.index > last) {
+      const t = document.createElement("div");
+      t.style.whiteSpace = "pre-wrap";
+      t.textContent = src.slice(last, m.index);
+      container.appendChild(t);
+    }
+    const header = (m[1] || "").trim();
+    const code = m[2].replace(/\n$/, "");
+    const isFile = /^file\s*:/i.test(header);
+    const filePath = isFile ? header.replace(/^file\s*:/i, "").trim() : "";
+    const lang = isFile ? "" : header.split(/\s+/)[0] || "";
+
+    const wrap = document.createElement("div");
+    wrap.className = "code-block-wrap";
+    const bar = document.createElement("div");
+    bar.className = "code-block-bar";
+    const label = document.createElement("span");
+    label.textContent = isFile ? "文件 · " + filePath : lang || "code";
+    bar.appendChild(label);
+    const actions = document.createElement("div");
+    actions.style.display = "flex";
+    actions.style.gap = "0.3rem";
+
+    const dl = document.createElement("button");
+    dl.type = "button";
+    dl.textContent = "下载文件";
+    const fname = isFile
+      ? filePath.split("/").pop() || "file.txt"
+      : "code-" + ++idx + "." + extFromLang(lang);
+    dl.onclick = () => downloadTextFile(fname, code);
+    actions.appendChild(dl);
+
+    if (isFile && activeProjectId) {
+      const applyBtn = document.createElement("button");
+      applyBtn.type = "button";
+      applyBtn.textContent = "写入项目";
+      applyBtn.onclick = () => {
+        applyFileToProject(filePath, code);
+      };
+      actions.appendChild(applyBtn);
+    }
+
+    bar.appendChild(actions);
+    wrap.appendChild(bar);
+    const pre = document.createElement("pre");
+    const codeEl = document.createElement("code");
+    codeEl.textContent = code;
+    pre.appendChild(codeEl);
+    wrap.appendChild(pre);
+    container.appendChild(wrap);
+
+    last = m.index + m[0].length;
+  }
+  if (last < src.length) {
+    const t = document.createElement("div");
+    t.style.whiteSpace = "pre-wrap";
+    t.textContent = src.slice(last);
+    container.appendChild(t);
+  }
+  if (!container.childNodes.length) {
+    container.textContent = src;
+  }
+}
+
 function renderAssistantBubble(el, fullText, reasoningExtra) {
   stopThinkAnimation();
   const parsed = parseThinkAnswer(fullText);
@@ -1346,7 +1526,8 @@ function renderAssistantBubble(el, fullText, reasoningExtra) {
   }
   const ans = document.createElement("div");
   ans.className = "answer-body";
-  ans.textContent = parsed.answer || (think ? "" : fullText || "");
+  const answerText = parsed.answer || (think ? "" : fullText || "");
+  renderRichAnswer(ans, answerText);
   el.appendChild(ans);
   chatMessages.scrollTop = chatMessages.scrollHeight;
 }
@@ -1356,8 +1537,12 @@ function friendlyError(raw) {
   if (/tpm|rpm|rate.?limit|exceeds.*limit|429/i.test(tip)) {
     return "请求过于频繁或额度不足（限流）。请等待 30～60 秒后再试，或换一个模型 / 明天再用。";
   }
-  if (/invalid.?api.?key|incorrect.?api.?key|401|unauthorized|鉴权|密钥/i.test(tip)) {
-    return "API Key 无效或已过期，请检查后重新保存。";
+  if (
+    /令牌已过期|验证不正确|invalid.?api.?key|incorrect.?api.?key|401|unauthorized|鉴权|密钥|token.*invalid|expired/i.test(
+      tip
+    )
+  ) {
+    return "API Key 无效或已过期。请打开菜单 → API 设置，重新粘贴智谱控制台的最新 Key 并保存。";
   }
   if (/insufficient|余额|quota|billing/i.test(tip)) {
     return "账户余额不足或配额已用完，请到对应平台充值或换模型。";
@@ -1378,7 +1563,7 @@ function ensureApiKey() {
   const provider = getProvider();
   let apiKey = getChatApiKey() || chatApiKeyInput.value.trim();
   if (!apiKey) {
-    alert("请先填写并保存 " + provider.name + " 的 API Key");
+    void uiAlert("请先填写并保存 " + provider.name + " 的 API Key");
     chatApiKeyInput.focus();
     return null;
   }
@@ -1436,7 +1621,7 @@ async function sendChatMessage() {
   if (!apiKey) return;
 
   if (attach && attach.type === "image" && provider.vision === false) {
-    alert(provider.name + " 当前配置可能不支持识图，可改用通义 / 智谱 / OpenAI / Kimi 再试。");
+    void uiAlert(provider.name + " 当前配置可能不支持识图，可改用通义 / 智谱 / OpenAI / Kimi 再试。");
   }
 
   chatInput.value = "";
@@ -1479,7 +1664,7 @@ async function sendChatMessage() {
   chatBusy = true;
   sendChatBtn.disabled = true;
 
-  const messages = [{ role: "system", content: provider.system }, ...chatHistory];
+  const messages = [{ role: "system", content: provider.system + buildProjectSystemExtra() }, ...chatHistory];
   const payload = { model: provider.model, messages, stream: true };
 
   try {
@@ -1561,8 +1746,11 @@ async function sendChatMessage() {
 
 async function generateImage() {
   if (chatBusy) return;
-  const prompt = chatInput.value.trim() || window.prompt("请输入生图描述（中文即可）");
-  if (!prompt) return;
+  let prompt = chatInput.value.trim();
+  if (!prompt) {
+    prompt = await uiPrompt("请输入生图描述（中文即可）", "", "生成图片");
+    if (!prompt) return;
+  }
 
   const provider = getProvider();
   const apiKey = ensureApiKey();
@@ -1734,8 +1922,11 @@ async function generateImage() {
 
 async function generateVideo() {
   if (chatBusy) return;
-  const prompt = chatInput.value.trim() || window.prompt("请输入视频描述");
-  if (!prompt) return;
+  let prompt = chatInput.value.trim();
+  if (!prompt) {
+    prompt = await uiPrompt("请输入视频描述", "", "生成视频");
+    if (!prompt) return;
+  }
 
   const provider = getProvider();
   const apiKey = ensureApiKey();
@@ -1808,6 +1999,266 @@ chatInput.addEventListener("input", () => {
   chatInput.style.height = Math.min(120, chatInput.scrollHeight) + "px";
 });
 
+
+/* ========== 项目管理（Grok 风格本地项目） ========== */
+const PROJECTS_KEY = "ai_projects_v1";
+const ACTIVE_PROJECT_KEY = "ai_active_project_v1";
+let activeProjectId = localStorage.getItem(ACTIVE_PROJECT_KEY) || null;
+let editingFilePath = null;
+
+function loadProjects() {
+  try {
+    return JSON.parse(localStorage.getItem(PROJECTS_KEY) || "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveProjects(list) {
+  localStorage.setItem(PROJECTS_KEY, JSON.stringify(list));
+}
+
+function getActiveProject() {
+  if (!activeProjectId) return null;
+  return loadProjects().find((p) => p.id === activeProjectId) || null;
+}
+
+function setActiveProject(id) {
+  activeProjectId = id;
+  if (id) localStorage.setItem(ACTIVE_PROJECT_KEY, id);
+  else localStorage.removeItem(ACTIVE_PROJECT_KEY);
+  updateProjectBadge();
+}
+
+function updateProjectBadge() {
+  const sel = document.getElementById("chatModelSelect");
+  if (!sel) return;
+  let badge = document.getElementById("chatProjectBadge");
+  const proj = getActiveProject();
+  if (proj) {
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.id = "chatProjectBadge";
+      badge.className = "chat-project-badge";
+      sel.parentElement.appendChild(badge);
+    }
+    badge.textContent = "项目 · " + proj.name;
+    badge.title = "点击打开项目管理";
+    badge.onclick = () => openProjectModal();
+  } else if (badge) {
+    badge.remove();
+  }
+}
+
+function buildProjectSystemExtra() {
+  const proj = getActiveProject();
+  if (!proj) return "";
+  let extra =
+    "\n\n【当前项目：" +
+    proj.name +
+    "】\n用户偏好：\n" +
+    (proj.preferences || "（无）") +
+    "\n\n项目文件列表与内容：\n";
+  (proj.files || []).forEach((f) => {
+    extra +=
+      "\n--- file:" +
+      f.path +
+      " ---\n" +
+      (f.content || "") +
+      "\n";
+  });
+  extra +=
+    "\n若需修改或新建文件，请用如下格式输出完整文件内容：\n```file:相对路径\n文件全文\n```\n用户可一键写入项目。";
+  return extra;
+}
+
+function applyFileToProject(path, content) {
+  if (!activeProjectId) {
+    void uiAlert("请先在菜单中创建并启用一个项目");
+    return;
+  }
+  const list = loadProjects();
+  const proj = list.find((p) => p.id === activeProjectId);
+  if (!proj) return;
+  if (!proj.files) proj.files = [];
+  const existing = proj.files.find((f) => f.path === path);
+  if (existing) existing.content = content;
+  else proj.files.push({ path, content });
+  saveProjects(list);
+  void uiAlert("已写入项目文件：" + path);
+  if (!document.getElementById("projectModal").hidden) renderProjectUI();
+}
+
+function renderProjectUI() {
+  const list = loadProjects();
+  const select = document.getElementById("projectSelect");
+  const prefs = document.getElementById("projectPrefs");
+  const fileList = document.getElementById("projectFileList");
+  select.innerHTML = "";
+  if (!list.length) {
+    select.innerHTML = '<option value="">暂无项目</option>';
+    prefs.value = "";
+    fileList.innerHTML = "";
+    document.getElementById("projectEditorWrap").hidden = true;
+    return;
+  }
+  list.forEach((p) => {
+    const opt = document.createElement("option");
+    opt.value = p.id;
+    opt.textContent = p.name + (p.id === activeProjectId ? "（使用中）" : "");
+    select.appendChild(opt);
+  });
+  const curId = select.value || list[0].id;
+  select.value = curId;
+  const proj = list.find((p) => p.id === curId);
+  prefs.value = proj.preferences || "";
+  fileList.innerHTML = "";
+  (proj.files || []).forEach((f) => {
+    const row = document.createElement("div");
+    row.className =
+      "project-file-item" + (editingFilePath === f.path ? " active" : "");
+    row.innerHTML =
+      "<span>" +
+      escapeHtml(f.path) +
+      '</span><button type="button" class="del-file" title="删除">×</button>';
+    row.querySelector("span").onclick = () => {
+      editingFilePath = f.path;
+      document.getElementById("projectEditorWrap").hidden = false;
+      document.getElementById("projectEditPath").textContent = f.path;
+      document.getElementById("projectFileEditor").value = f.content || "";
+      renderProjectUI();
+    };
+    row.querySelector(".del-file").onclick = async (e) => {
+      e.stopPropagation();
+      const ok = await uiConfirm("删除文件 " + f.path + "？");
+      if (!ok) return;
+      proj.files = proj.files.filter((x) => x.path !== f.path);
+      saveProjects(list);
+      if (editingFilePath === f.path) {
+        editingFilePath = null;
+        document.getElementById("projectEditorWrap").hidden = true;
+      }
+      renderProjectUI();
+    };
+    fileList.appendChild(row);
+  });
+}
+
+function openProjectModal() {
+  document.getElementById("projectModal").hidden = false;
+  renderProjectUI();
+}
+
+function closeProjectModal() {
+  document.getElementById("projectModal").hidden = true;
+}
+
+document.getElementById("openProjectsBtn").addEventListener("click", () => {
+  closeDrawer();
+  openProjectModal();
+});
+document.getElementById("closeProject").addEventListener("click", closeProjectModal);
+document.getElementById("projectMask").addEventListener("click", closeProjectModal);
+
+document.getElementById("newProjectBtn").addEventListener("click", async () => {
+  const name = await uiPrompt("项目名称", "我的项目", "新建项目");
+  if (!name) return;
+  const list = loadProjects();
+  const id = "p_" + Date.now().toString(36);
+  list.unshift({
+    id,
+    name: name.trim(),
+    preferences: "",
+    files: [{ path: "README.md", content: "# " + name.trim() + "\n\n在此写项目说明。\n" }],
+  });
+  saveProjects(list);
+  setActiveProject(id);
+  renderProjectUI();
+});
+
+document.getElementById("projectSelect").addEventListener("change", () => {
+  editingFilePath = null;
+  document.getElementById("projectEditorWrap").hidden = true;
+  renderProjectUI();
+});
+
+document.getElementById("projectPrefs").addEventListener("change", () => {
+  const list = loadProjects();
+  const id = document.getElementById("projectSelect").value;
+  const proj = list.find((p) => p.id === id);
+  if (!proj) return;
+  proj.preferences = document.getElementById("projectPrefs").value;
+  saveProjects(list);
+});
+
+document.getElementById("addProjectFileBtn").addEventListener("click", async () => {
+  const list = loadProjects();
+  const id = document.getElementById("projectSelect").value;
+  const proj = list.find((p) => p.id === id);
+  if (!proj) {
+    void uiAlert("请先新建项目");
+    return;
+  }
+  const path = await uiPrompt("文件路径，例如 src/main.js", "notes.md", "添加文件");
+  if (!path) return;
+  if (!proj.files) proj.files = [];
+  if (proj.files.some((f) => f.path === path)) {
+    void uiAlert("文件已存在");
+    return;
+  }
+  proj.files.push({ path: path.trim(), content: "" });
+  saveProjects(list);
+  editingFilePath = path.trim();
+  document.getElementById("projectEditorWrap").hidden = false;
+  document.getElementById("projectEditPath").textContent = path.trim();
+  document.getElementById("projectFileEditor").value = "";
+  renderProjectUI();
+});
+
+document.getElementById("saveProjectFileBtn").addEventListener("click", () => {
+  const list = loadProjects();
+  const id = document.getElementById("projectSelect").value;
+  const proj = list.find((p) => p.id === id);
+  if (!proj || !editingFilePath) return;
+  const f = proj.files.find((x) => x.path === editingFilePath);
+  if (f) f.content = document.getElementById("projectFileEditor").value;
+  saveProjects(list);
+  void uiAlert("文件已保存");
+});
+
+document.getElementById("useProjectBtn").addEventListener("click", () => {
+  const id = document.getElementById("projectSelect").value;
+  if (!id) {
+    void uiAlert("没有可使用的项目");
+    return;
+  }
+  // 同步偏好
+  const list = loadProjects();
+  const proj = list.find((p) => p.id === id);
+  if (proj) {
+    proj.preferences = document.getElementById("projectPrefs").value;
+    saveProjects(list);
+  }
+  setActiveProject(id);
+  closeProjectModal();
+  void uiAlert("已启用项目，对话时会带上项目偏好与文件");
+});
+
+document.getElementById("deleteProjectBtn").addEventListener("click", async () => {
+  const id = document.getElementById("projectSelect").value;
+  if (!id) return;
+  const ok = await uiConfirm("确定删除该项目？不可恢复。");
+  if (!ok) return;
+  let list = loadProjects().filter((p) => p.id !== id);
+  saveProjects(list);
+  if (activeProjectId === id) setActiveProject(null);
+  editingFilePath = null;
+  document.getElementById("projectEditorWrap").hidden = true;
+  renderProjectUI();
+});
+
+
 /* 启动 */
 resizeCanvas();
 loadProfile();
+updateProjectBadge();
