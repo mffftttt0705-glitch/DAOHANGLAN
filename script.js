@@ -998,14 +998,17 @@ const AI_PROVIDERS = {
     name: "Google Gemini",
     navDesc: "谷歌 Gemini",
     base: "https://generativelanguage.googleapis.com/v1beta/openai",
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
     models: [
+      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
+      { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite" },
+      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
       { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
       { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
-      { id: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
-      { id: "gemini-2.5-pro-preview-05-06", label: "Gemini 2.5 Pro Preview" },
+      { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
+      { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview" },
     ],
-    tip: 'Key 在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 创建（OpenAI 兼容端点）。',
+    tip: 'Key 在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 创建。旧 preview 模型名已下线，请选列表中的稳定 ID。',
     system: THINK_SYSTEM,
     vision: true,
     imageGen: false,
@@ -1291,7 +1294,13 @@ function getSelectedModelId() {
   const pid = getCurrentProviderId();
   const p = getProvider();
   const map = loadModelMap();
-  const saved = map[pid];
+  let saved = map[pid];
+  // Gemini 旧 preview / 1.5 已下线
+  if (pid === "gemini" && saved && !(p.models || []).some((m) => m.id === saved)) {
+    saved = "gemini-2.5-flash";
+    map.gemini = saved;
+    saveModelMap(map);
+  }
   if (saved && (p.models || []).some((m) => m.id === saved)) return saved;
   return p.model;
 }
