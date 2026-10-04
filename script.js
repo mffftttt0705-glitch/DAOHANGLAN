@@ -1556,6 +1556,8 @@ saveChatKeyBtn.addEventListener("click", () => {
 
 /** 待发送附件：{ type:'image'|'file', name, dataUrl?, text?, mime? } */
 let pendingAttach = null;
+/** @type {{name:string,dataUrl:string,mime:string}[]} */
+let pendingImages = [];
 
 const chatAttachPreview = document.getElementById("chatAttachPreview");
 const chatPickImage = document.getElementById("chatPickImage");
@@ -1592,45 +1594,69 @@ function fileToText(file) {
 }
 
 function renderAttachPreview() {
-  if (!pendingAttach) {
-    chatAttachPreview.hidden = true;
-    chatAttachPreview.innerHTML = "";
+  const box = document.getElementById("chatAttachPreview");
+  if (!box) return;
+  const hasImg = pendingImages && pendingImages.length;
+  const hasFile = pendingAttach && pendingAttach.type === "file";
+  if (!hasImg && !hasFile) {
+    box.hidden = true;
+    box.innerHTML = "";
     return;
   }
-  chatAttachPreview.hidden = false;
-  if (pendingAttach.type === "image") {
-    chatAttachPreview.innerHTML =
-      '<div class="attach-chip"><img src="' +
-      pendingAttach.dataUrl +
-      '" alt=""/><span>' +
-      escapeHtml(pendingAttach.name) +
-      '</span><button type="button" id="clearAttach">✕</button></div>';
-  } else {
-    chatAttachPreview.innerHTML =
-      '<div class="attach-chip"><span>📄 ' +
-      escapeHtml(pendingAttach.name) +
-      '</span><button type="button" id="clearAttach">✕</button></div>';
+  box.hidden = false;
+  let html = "";
+  if (hasImg) {
+    pendingImages.forEach((img, i) => {
+      html +=
+        '<div class="attach-chip"><img src="' +
+        img.dataUrl +
+        '" alt=""/><span>' +
+        escapeHtml(img.name) +
+        '</span><button type="button" class="attach-x" data-img-i="' +
+        i +
+        '">×</button></div>';
+    });
   }
-  document.getElementById("clearAttach").onclick = () => {
-    pendingAttach = null;
-    renderAttachPreview();
-  };
+  if (hasFile) {
+    html +=
+      '<div class="attach-chip file"><span>📄 ' +
+      escapeHtml(pendingAttach.name) +
+      '</span><button type="button" class="attach-x" id="clearAttachFile">×</button></div>';
+  }
+  box.innerHTML = html;
+  box.querySelectorAll("[data-img-i]").forEach((btn) => {
+    btn.onclick = () => {
+      const i = Number(btn.getAttribute("data-img-i"));
+      pendingImages.splice(i, 1);
+      renderAttachPreview();
+    };
+  });
+  const cf = document.getElementById("clearAttachFile");
+  if (cf)
+    cf.onclick = () => {
+      pendingAttach = null;
+      renderAttachPreview();
+    };
 }
 
 chatPickImage.addEventListener("click", () => chatImageInput.click());
 chatPickFile.addEventListener("click", () => chatFileInput.click());
 
 chatImageInput.addEventListener("change", async () => {
-  const file = chatImageInput.files[0];
+  const files = Array.from(chatImageInput.files || []);
   chatImageInput.value = "";
-  if (!file) return;
-  try {
-    const dataUrl = await fileToDataURLLimited(file, 1.5 * 1024 * 1024);
-    pendingAttach = { type: "image", name: file.name, dataUrl, mime: file.type };
-    renderAttachPreview();
-  } catch (e) {
-    void uiAlert(e.message || "图片读取失败");
+  if (!files.length) return;
+  const maxN = 6;
+  for (const file of files.slice(0, maxN)) {
+    try {
+      const dataUrl = await fileToDataURLLimited(file, 1.2 * 1024 * 1024);
+      pendingImages.push({ name: file.name, dataUrl, mime: file.type || "image/jpeg" });
+    } catch (e) {
+      void uiAlert((file.name || "图片") + "：" + (e.message || "读取失败"));
+    }
   }
+  if (files.length > maxN) void uiAlert("一次最多附 " + maxN + " 张图，已截取前 " + maxN + " 张");
+  renderAttachPreview();
 });
 
 chatFileInput.addEventListener("change", async () => {
@@ -1641,7 +1667,7 @@ chatFileInput.addEventListener("change", async () => {
   if (/^image\//i.test(file.type) || /\.(jpe?g|png|gif|webp|bmp)$/i.test(file.name)) {
     try {
       const dataUrl = await fileToDataURLLimited(file, 1.5 * 1024 * 1024);
-      pendingAttach = { type: "image", name: file.name, dataUrl, mime: file.type || "image/jpeg" };
+      pendingImages.push({ name: file.name, dataUrl, mime: file.type || "image/jpeg" });
       renderAttachPreview();
     } catch (e) {
       void uiAlert(e.message || "图片读取失败");
@@ -1809,9 +1835,9 @@ function renderRichAnswer(container, text) {
     container.appendChild(card);
 
     // 若有活跃项目，提供一键全部写入
+    const bar = document.createElement("div");
+    bar.className = "file-patch-bar";
     if (activeProjectId) {
-      const bar = document.createElement("div");
-      bar.className = "file-patch-bar";
       const btn = document.createElement("button");
       btn.type = "button";
       btn.textContent = "全部写入当前项目";
@@ -1820,8 +1846,15 @@ function renderRichAnswer(container, text) {
         void uiAlert("已写入 " + files.length + " 个文件到项目");
       };
       bar.appendChild(btn);
-      container.appendChild(bar);
     }
+    if (getGithubConfig().token && getGithubConfig().repo) {
+      const gbtn = document.createElement("button");
+      gbtn.type = "button";
+      gbtn.textContent = "推送到 GitHub";
+      gbtn.onclick = () => pushFilesToGithub(files);
+      bar.appendChild(gbtn);
+    }
+    if (bar.childNodes.length) container.appendChild(bar);
   } else if (!rest) {
     container.textContent = text || "";
   }
@@ -1911,6 +1944,54 @@ document.getElementById("codePackRun").addEventListener("click", () => {
   frame.srcdoc = html;
 });
 
+
+
+/** 流式过程中：检测到代码块则显示「正在编译代码」而不是把大段代码刷在对话框 */
+function renderAssistantBubbleLive(el, content, reasoning) {
+  el.classList.remove("streaming");
+  el.innerHTML = "";
+  if (reasoning) {
+    const det = document.createElement("details");
+    det.className = "thinking-block";
+    det.open = true;
+    det.innerHTML =
+      "<summary>思考过程</summary><div class=\"thinking-body\"></div>";
+    det.querySelector(".thinking-body").textContent = reasoning;
+    el.appendChild(det);
+  }
+  const src = String(content || "");
+  const openFence = (src.match(/```/g) || []).length % 2 === 1;
+  const hasFence = src.includes("```");
+  // 去掉已闭合代码块后的纯文本预览
+  let preview = src.replace(/```[\s\S]*?```/g, "");
+  if (openFence) {
+    // 截断到最后一个未闭合 fence 之前
+    const last = src.lastIndexOf("```");
+    preview = src.slice(0, last).replace(/```[\s\S]*?```/g, "");
+  }
+  preview = preview.trim();
+  if (preview) {
+    const t = document.createElement("div");
+    t.className = "answer-body";
+    t.style.whiteSpace = "pre-wrap";
+    // 只显示末尾一小段，避免刷屏
+    t.textContent = preview.length > 800 ? "…\n" + preview.slice(-800) : preview;
+    el.appendChild(t);
+  }
+  if (hasFence) {
+    const st = document.createElement("div");
+    st.className = "compile-status";
+    st.innerHTML =
+      '<span class="compile-spin"></span><span>' +
+      (openFence ? "正在编译代码…" : "代码已生成，正在打包…") +
+      "</span>";
+    el.appendChild(st);
+  } else if (!preview && !reasoning) {
+    el.innerHTML =
+      '<div class="compile-status"><span class="compile-spin"></span>正在生成…</div>';
+  }
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
 
 function renderAssistantBubble(el, fullText, reasoningExtra) {
   stopThinkAnimation();
@@ -2033,9 +2114,12 @@ async function sendChatMessage() {
       void uiAlert("请输入视频描述后再发送");
       return;
     }
-    const img = attach && attach.type === "image" ? attach.dataUrl : null;
+    const img =
+      (pendingImages[0] && pendingImages[0].dataUrl) ||
+      (attach && attach.type === "image" ? attach.dataUrl : null);
     chatInput.value = "";
     pendingAttach = null;
+    pendingImages = [];
     renderAttachPreview();
     await runAgnesVideoGeneration(text, img);
     return;
@@ -2045,29 +2129,42 @@ async function sendChatMessage() {
   const apiKey = ensureApiKey();
   if (!apiKey) return;
 
-  if (attach && attach.type === "image" && provider.vision === false) {
-    void uiAlert(provider.name + " 当前配置可能不支持识图，可改用通义 / 智谱 / OpenAI / Kimi 再试。");
+  const imgs = pendingImages.slice();
+  if (imgs.length && provider.vision === false) {
+    void uiAlert(provider.name + " 当前配置可能不支持识图，可改用通义 / 智谱 / OpenAI / Kimi / Gemini 再试。");
   }
 
   chatInput.value = "";
   pendingAttach = null;
+  pendingImages = [];
   renderAttachPreview();
 
   const userEl = appendBubble("user");
   let displayText = text;
   if (attach && attach.type === "file") {
     displayText = (text ? text + "\n\n" : "") + "【已附文件：" + attach.name + "】";
-  } else if (attach && attach.type === "image" && !text) {
-    displayText = "请描述这张图片";
+  } else if (imgs.length && !text) {
+    displayText = "请描述这些图片（共 " + imgs.length + " 张）";
+  } else if (imgs.length) {
+    displayText = text + "\n【附图 " + imgs.length + " 张】";
   }
-  setUserBubble(userEl, displayText, attach);
+  // 展示首图预览，其余计数
+  const firstImg = imgs[0] ? { type: "image", dataUrl: imgs[0].dataUrl, name: imgs[0].name } : attach;
+  setUserBubble(userEl, displayText, firstImg && firstImg.type === "image" ? firstImg : attach);
+  if (imgs.length > 1) {
+    const more = document.createElement("div");
+    more.style.cssText = "font-size:0.75rem;opacity:0.7;margin-top:4px";
+    more.textContent = "另有 " + (imgs.length - 1) + " 张附图";
+    userEl.appendChild(more);
+  }
 
   let userContent;
-  if (attach && attach.type === "image" && attach.dataUrl) {
-    userContent = [
-      { type: "text", text: text || "请详细描述这张图片的内容。" },
-      { type: "image_url", image_url: { url: attach.dataUrl } },
-    ];
+  if (imgs.length) {
+    const parts = [{ type: "text", text: text || "请详细描述这些图片的内容。" }];
+    imgs.forEach((im) => {
+      parts.push({ type: "image_url", image_url: { url: im.dataUrl } });
+    });
+    userContent = parts;
   } else if (attach && attach.type === "file") {
     userContent =
       (text ? text + "\n\n" : "") +
@@ -2089,12 +2186,86 @@ async function sendChatMessage() {
   chatBusy = true;
   sendChatBtn.disabled = true;
 
-  const messages = [{ role: "system", content: provider.system + buildProjectSystemExtra() }, ...chatHistory];
-  const payload = { model: provider.model, messages, stream: true };
+  // 后台保活：屏幕唤醒锁 + 周期落盘
+  let wakeLock = null;
+  try {
+    if (navigator.wakeLock && navigator.wakeLock.request) {
+      wakeLock = await navigator.wakeLock.request("screen");
+    }
+  } catch (_) {}
+  const checkpointKey = "ai_stream_checkpoint_" + (currentSessionId || "tmp");
+  const saveCheckpoint = (full, reasoning) => {
+    try {
+      sessionStorage.setItem(
+        checkpointKey,
+        JSON.stringify({ full, reasoning, t: Date.now() })
+      );
+    } catch (_) {}
+  };
+
+  const messages = [
+    { role: "system", content: provider.system + buildProjectSystemExtra() + buildGithubSystemExtra() },
+    ...chatHistory,
+  ];
+
+  // 切到后台时流式容易中断：先流式，失败则非流式重试一次
+  async function readStream(res) {
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let full = "";
+    let reasoning = "";
+    let buffer = "";
+    let lastSave = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || !trimmed.startsWith("data:")) continue;
+        const data = trimmed.slice(5).trim();
+        if (data === "[DONE]") continue;
+        try {
+          const json = JSON.parse(data);
+          const delta = json.choices && json.choices[0] && json.choices[0].delta;
+          if (!delta) continue;
+          if (delta.reasoning_content) reasoning += delta.reasoning_content;
+          if (delta.reasoning) reasoning += delta.reasoning;
+          if (delta.content) full += delta.content;
+          if (full || reasoning) {
+            stopThinkAnimation();
+            renderAssistantBubbleLive(assistantEl, full, reasoning);
+          }
+          if (Date.now() - lastSave > 1500) {
+            saveCheckpoint(full, reasoning);
+            lastSave = Date.now();
+          }
+        } catch (_) {}
+      }
+    }
+    return { full, reasoning };
+  }
+
+  async function readOnce(res) {
+    const data = await res.json();
+    const msg = data.choices && data.choices[0] && data.choices[0].message;
+    const full = (msg && msg.content) || "";
+    const reasoning =
+      (msg && (msg.reasoning_content || msg.reasoning)) ||
+      (data.choices && data.choices[0] && data.choices[0].reasoning) ||
+      "";
+    return { full, reasoning };
+  }
 
   try {
-    const res = await apiFetch("/chat/completions", payload, apiKey, provider);
+    let full = "";
+    let reasoning = "";
+    let usedNonStream = false;
 
+    const payloadStream = { model: provider.model, messages, stream: true };
+    let res = await apiFetch("/chat/completions", payloadStream, apiKey, provider);
     if (!res.ok) {
       let errText = "HTTP " + res.status;
       try {
@@ -2111,37 +2282,38 @@ async function sendChatMessage() {
       throw new Error(errText);
     }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let full = "";
-    let reasoning = "";
-    let buffer = "";
+    try {
+      const out = await readStream(res);
+      full = out.full;
+      reasoning = out.reasoning;
+    } catch (streamErr) {
+      console.warn("stream interrupted, fallback non-stream", streamErr);
+      // 后台中断：非流式重试拿完整结果
+      usedNonStream = true;
+      stopThinkAnimation();
+      assistantEl.innerHTML =
+        '<div class="compile-status"><span class="compile-spin"></span>连接中断，正在重新拉取完整结果…</div>';
+      const payloadOnce = { model: provider.model, messages, stream: false };
+      res = await apiFetch("/chat/completions", payloadOnce, apiKey, provider);
+      if (!res.ok) throw streamErr;
+      const out = await readOnce(res);
+      full = out.full;
+      reasoning = out.reasoning;
+    }
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed || !trimmed.startsWith("data:")) continue;
-        const data = trimmed.slice(5).trim();
-        if (data === "[DONE]") continue;
-        try {
-          const json = JSON.parse(data);
-          const delta = json.choices && json.choices[0] && json.choices[0].delta;
-          if (!delta) continue;
-          if (delta.reasoning_content) reasoning += delta.reasoning_content;
-          if (delta.reasoning) reasoning += delta.reasoning;
-          if (delta.content) full += delta.content;
-          if (full || reasoning) {
-            stopThinkAnimation();
-            renderAssistantBubble(assistantEl, full, reasoning);
+    // 若流式结果过短且可能被掐断，也尝试非流式补全
+    if (!usedNonStream && full.length < 8 && !reasoning) {
+      try {
+        const payloadOnce = { model: provider.model, messages, stream: false };
+        res = await apiFetch("/chat/completions", payloadOnce, apiKey, provider);
+        if (res.ok) {
+          const out = await readOnce(res);
+          if ((out.full || "").length > full.length) {
+            full = out.full;
+            reasoning = out.reasoning || reasoning;
           }
-        } catch (_) {}
-      }
+        }
+      } catch (_) {}
     }
 
     stopThinkAnimation();
@@ -2151,21 +2323,54 @@ async function sendChatMessage() {
     if (det && finalText) det.open = false;
 
     if (!finalText && !reasoning) {
-      assistantEl.textContent = "（模型没有返回内容）";
+      // 尝试从 checkpoint 恢复
+      try {
+        const ck = JSON.parse(sessionStorage.getItem(checkpointKey) || "null");
+        if (ck && ck.full) {
+          renderAssistantBubble(assistantEl, ck.full, ck.reasoning || "");
+          chatHistory.push({ role: "assistant", content: ck.full });
+          persistCurrentSession();
+        } else {
+          assistantEl.textContent = "（模型没有返回内容，若刚切到后台请再试一次）";
+        }
+      } catch (_) {
+        assistantEl.textContent = "（模型没有返回内容）";
+      }
     } else {
       chatHistory.push({ role: "assistant", content: finalText || reasoning });
       persistCurrentSession();
+      try {
+        sessionStorage.removeItem(checkpointKey);
+      } catch (_) {}
     }
   } catch (e) {
     console.error(e);
     stopThinkAnimation();
-    assistantEl.classList.remove("streaming");
-    assistantEl.className = "chat-bubble error";
-    assistantEl.textContent = "请求失败：" + friendlyError(e.message || e);
+    // 尝试 checkpoint
+    try {
+      const ck = JSON.parse(sessionStorage.getItem(checkpointKey) || "null");
+      if (ck && ck.full && ck.full.length > 20) {
+        renderAssistantBubble(assistantEl, ck.full, ck.reasoning || "");
+        chatHistory.push({ role: "assistant", content: ck.full });
+        persistCurrentSession();
+        void uiAlert("请求中断，已恢复部分生成内容。");
+      } else {
+        assistantEl.classList.remove("streaming");
+        assistantEl.className = "chat-bubble error";
+        assistantEl.textContent = "请求失败：" + friendlyError(e.message || e);
+      }
+    } catch (_) {
+      assistantEl.classList.remove("streaming");
+      assistantEl.className = "chat-bubble error";
+      assistantEl.textContent = "请求失败：" + friendlyError(e.message || e);
+    }
   } finally {
     chatBusy = false;
     sendChatBtn.disabled = false;
     chatInput.focus();
+    try {
+      if (wakeLock) await wakeLock.release();
+    } catch (_) {}
   }
 }
 
@@ -3012,6 +3217,134 @@ document.getElementById("saveProjectFileBtn").addEventListener("click", () => {
   renderProjBrowser();
 });
 
+
+
+/* ========== GitHub ========== */
+const GH_STORAGE = "ai_github_cfg_v1";
+
+function getGithubConfig() {
+  try {
+    return JSON.parse(localStorage.getItem(GH_STORAGE) || "{}");
+  } catch {
+    return {};
+  }
+}
+function saveGithubConfig(cfg) {
+  localStorage.setItem(GH_STORAGE, JSON.stringify(cfg || {}));
+}
+
+function buildGithubSystemExtra() {
+  const cfg = getGithubConfig();
+  if (!cfg.token || !cfg.repo) return "";
+  return (
+    "\n用户已连接 GitHub 仓库「" +
+    cfg.repo +
+    "」。若需修改仓库文件，请用 markdown 代码块输出完整文件，并在代码块语言行使用 `file:相对路径` 格式（例如 ```file:src/index.js）。用户可一键推送。"
+  );
+}
+
+async function githubApi(body) {
+  const res = await fetch("/api/github", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || data.message || "HTTP " + res.status);
+  return data;
+}
+
+async function pushFilesToGithub(files) {
+  const cfg = getGithubConfig();
+  if (!cfg.token || !cfg.repo) {
+    void uiAlert("请先在菜单「GitHub 仓库」中配置 Token 与仓库");
+    return;
+  }
+  const parts = String(cfg.repo).split("/").filter(Boolean);
+  if (parts.length < 2) {
+    void uiAlert("仓库格式应为 owner/repo");
+    return;
+  }
+  const owner = parts[0];
+  const repo = parts[1];
+  const branch = cfg.branch || "main";
+  const prefix = (cfg.pathPrefix || "").replace(/^\/+|\/+$/g, "");
+  let ok = 0;
+  let fail = 0;
+  for (const f of files) {
+    let path = f.path.replace(/^\/+/, "");
+    if (prefix) path = prefix + "/" + path;
+    try {
+      await githubApi({
+        action: "put",
+        token: cfg.token,
+        owner,
+        repo,
+        branch,
+        path,
+        content: f.content,
+        message: "AI update: " + path,
+      });
+      ok++;
+    } catch (e) {
+      console.error(e);
+      fail++;
+    }
+  }
+  void uiAlert("GitHub 推送完成：成功 " + ok + "，失败 " + fail);
+}
+
+function openGithubModal() {
+  const cfg = getGithubConfig();
+  document.getElementById("ghToken").value = cfg.token || "";
+  document.getElementById("ghRepo").value = cfg.repo || "";
+  document.getElementById("ghBranch").value = cfg.branch || "main";
+  document.getElementById("ghPathPrefix").value = cfg.pathPrefix || "";
+  document.getElementById("ghStatus").textContent = cfg.token
+    ? "已保存配置（Token 已隐藏显示为已填）"
+    : "";
+  document.getElementById("githubModal").hidden = false;
+  closeDrawer();
+}
+function closeGithubModal() {
+  document.getElementById("githubModal").hidden = true;
+}
+
+document.getElementById("openGithubBtn")?.addEventListener("click", openGithubModal);
+document.getElementById("closeGithub")?.addEventListener("click", closeGithubModal);
+document.getElementById("githubMask")?.addEventListener("click", closeGithubModal);
+document.getElementById("saveGithub")?.addEventListener("click", () => {
+  const cfg = {
+    token: document.getElementById("ghToken").value.trim(),
+    repo: document.getElementById("ghRepo").value.trim(),
+    branch: document.getElementById("ghBranch").value.trim() || "main",
+    pathPrefix: document.getElementById("ghPathPrefix").value.trim(),
+  };
+  saveGithubConfig(cfg);
+  document.getElementById("ghStatus").textContent = "已保存";
+  void uiAlert("GitHub 配置已保存");
+});
+document.getElementById("testGithub")?.addEventListener("click", async () => {
+  const token = document.getElementById("ghToken").value.trim();
+  if (!token) return void uiAlert("请先填写 Token");
+  try {
+    const d = await githubApi({ action: "test", token });
+    document.getElementById("ghStatus").textContent =
+      "连接成功：" + (d.login || d.name || "ok");
+    void uiAlert("连接成功：@" + (d.login || ""));
+  } catch (e) {
+    document.getElementById("ghStatus").textContent = "失败：" + e.message;
+    void uiAlert("连接失败：" + e.message);
+  }
+});
+
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && chatBusy) {
+    // 回到前台时，流可能已断，由 send 内 fallback 处理；此处仅提示
+    console.log("[chat] back to foreground while generating");
+  }
+});
 
 /* 启动 */
 resizeCanvas();
