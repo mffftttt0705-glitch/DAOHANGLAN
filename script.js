@@ -928,10 +928,10 @@ const AI_PROVIDERS = {
     base: "https://apihub.agnes-ai.com/v1",
     model: "agnes-2.0-flash",
     models: [
-      { id: "agnes-2.0-flash", label: "Agnes 2.0 Flash（对话）" },
-      { id: "agnes-video-2.5-flash", label: "Agnes Video 2.5 Flash（生视频）", video: true },
+      { id: "agnes-2.0-flash", label: "Agnes 2.0 Flash", tag: "免费", free: true },
+      { id: "agnes-video-2.5-flash", label: "Agnes Video 2.5 Flash", tag: "免费·视频", free: true, video: true },
     ],
-    tip: 'Key 在 <a href="https://platform.agnes-ai.com" target="_blank" rel="noopener">Agnes 平台</a> 免费注册。对话用 Flash，生视频请点「生视频」或选 Video 模型后发送。',
+    tip: 'Key 在 <a href="https://platform.agnes-ai.com" target="_blank" rel="noopener">Agnes 平台</a> 免费注册。',
     system: THINK_SYSTEM,
     vision: true,
     imageGen: true,
@@ -939,19 +939,150 @@ const AI_PROVIDERS = {
     videoGen: true,
     videoModel: "agnes-video-2.5-flash",
   },
+  deepseek: {
+    name: "DeepSeek",
+    navDesc: "深度求索 · 写代码强",
+    base: "https://api.deepseek.com",
+    model: "deepseek-chat",
+    models: [
+      { id: "deepseek-chat", label: "DeepSeek Chat (V3)", tag: "免费额度·推荐", free: true },
+      { id: "deepseek-reasoner", label: "DeepSeek Reasoner (R1)", tag: "免费额度·推理", free: true },
+    ],
+    tip: 'Key 在 <a href="https://platform.deepseek.com" target="_blank" rel="noopener">DeepSeek</a> 创建，注册送额度，写代码推荐。',
+    system: THINK_SYSTEM,
+    vision: false,
+    imageGen: false,
+    videoGen: false,
+  },
+  qwen: {
+    name: "通义千问",
+    navDesc: "阿里百炼",
+    base: "https://dashscope.aliyuncs.com/compatible-mode/v1",
+    model: "qwen-plus",
+    models: [
+      { id: "qwen-plus", label: "Qwen Plus", tag: "有免费额度", free: true },
+      { id: "qwen-turbo", label: "Qwen Turbo", tag: "有免费额度", free: true },
+      { id: "qwen-max", label: "Qwen Max", tag: "付费更强", free: false },
+      { id: "qwen-long", label: "Qwen Long", tag: "长上下文", free: true },
+      { id: "qwen-vl-plus", label: "Qwen VL Plus（识图）", tag: "识图·有免费额度", free: true },
+      { id: "qwen2.5-vl-72b-instruct", label: "Qwen2.5-VL 72B", tag: "识图·强", free: false },
+      { id: "qwen-coder-plus", label: "Qwen Coder Plus", tag: "写代码", free: true },
+    ],
+    tip: 'Key 在 <a href="https://bailian.console.aliyun.com" target="_blank" rel="noopener">阿里云百炼</a> 创建。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: true,
+    imageModel: "wanx-v1",
+    videoGen: false,
+  },
+  zhipu: {
+    name: "智谱 GLM",
+    navDesc: "智谱清言",
+    base: "https://open.bigmodel.cn/api/paas/v4",
+    model: "glm-4.6v-flash",
+    models: [
+      { id: "glm-4.6v-flash", label: "GLM-4.6V Flash（识图）", tag: "免费·识图推荐", free: true },
+      { id: "glm-4.5-flash", label: "GLM-4.5 Flash", tag: "免费", free: true },
+      { id: "glm-4.7-flash", label: "GLM-4.7 Flash", tag: "免费", free: true },
+      { id: "glm-4-flash", label: "GLM-4 Flash", tag: "旧免费档", free: true },
+      { id: "glm-5.3-flash", label: "GLM-5.3 Flash", tag: "付费·写代码强·识图", free: false },
+      { id: "glm-5v-turbo", label: "GLM-5V Turbo", tag: "付费·视觉编程", free: false },
+      { id: "glm-5.3", label: "GLM-5.3", tag: "付费·旗舰编程", free: false },
+      { id: "glm-4-air", label: "GLM-4 Air", tag: "不建议", deprecated: true },
+      { id: "glm-4-plus", label: "GLM-4 Plus", tag: "不建议·旧", deprecated: true },
+      { id: "glm-4-long", label: "GLM-4 Long", tag: "不建议·旧", deprecated: true },
+    ],
+    tip: 'Key 在 <a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a>。免费优先 glm-4.6v-flash；额度不足请换 DeepSeek。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: true,
+    imageModel: "cogview-3-flash",
+    videoGen: false,
+  },
+  kimi: {
+    name: "Kimi",
+    navDesc: "月之暗面",
+    base: "https://api.moonshot.cn/v1",
+    model: "moonshot-v1-128k",
+    models: [
+      { id: "moonshot-v1-8k", label: "Kimi 8K", tag: "有免费额度", free: true },
+      { id: "moonshot-v1-32k", label: "Kimi 32K", tag: "有免费额度", free: true },
+      { id: "moonshot-v1-128k", label: "Kimi 128K", tag: "长上下文", free: true },
+      { id: "kimi-latest", label: "Kimi Latest", tag: "最新", free: false },
+    ],
+    tip: 'Key 在 <a href="https://platform.moonshot.cn" target="_blank" rel="noopener">Moonshot 开放平台</a> 创建。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: false,
+    videoGen: false,
+  },
+  gemini: {
+    name: "Google Gemini",
+    navDesc: "谷歌 Gemini",
+    base: "https://generativelanguage.googleapis.com/v1beta/openai",
+    model: "gemini-3.8-flash",
+    models: [
+      { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash", tag: "免费·推荐", free: true },
+      { id: "gemini-3.5-flash-lite", label: "Gemini 3.5 Flash-Lite", tag: "免费", free: true },
+      { id: "gemini-3.1-flash-lite", label: "Gemini 3.1 Flash-Lite", tag: "免费", free: true },
+      { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview", tag: "可能限流", free: true },
+      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash", tag: "免费", free: true },
+      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash", tag: "停用·新用户不可用", deprecated: true },
+      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro", tag: "停用·新用户不可用", deprecated: true },
+    ],
+    tip: 'Key 在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a>。新账号务必选 3.8 Flash。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: false,
+    videoGen: false,
+  },
+  doubao: {
+    name: "豆包 / 火山方舟",
+    navDesc: "字节豆包",
+    base: "https://ark.cn-beijing.volces.com/api/v3",
+    model: "doubao-1-5-lite-32k-250115",
+    models: [
+      { id: "doubao-1-5-lite-32k-250115", label: "Doubao 1.5 Lite", tag: "常用·需开通", free: false },
+      { id: "doubao-1-5-pro-32k-250115", label: "Doubao 1.5 Pro", tag: "需开通", free: false },
+      { id: "doubao-seed-1-6-251015", label: "Doubao Seed 1.6", tag: "需开通接入点", free: false },
+      { id: "doubao-seed-1-6-250615", label: "Doubao Seed 1.6 (250615)", tag: "停用·即将下线", deprecated: true },
+      { id: "doubao-seed-2-0-lite-260428", label: "Doubao Seed 2.0 Lite", tag: "需开通", free: false },
+    ],
+    tip: '火山方舟 Key：在控制台<strong>先开通模型并创建推理接入点</strong>，模型 ID 填接入点 ID（以 ep- 开头）或已开通的模型名。详见 <a href="https://console.volcengine.com/ark" target="_blank" rel="noopener">火山方舟</a>。',
+    system: THINK_SYSTEM,
+    vision: true,
+    imageGen: false,
+    videoGen: false,
+  },
+  sensenova: {
+    name: "商汤日日新",
+    navDesc: "SenseNova",
+    base: "https://token.sensenova.cn/v1",
+    model: "sensenova-6.8-flash-lite",
+    models: [
+      { id: "sensenova-6.8-flash-lite", label: "SenseNova 6.8 Flash Lite", tag: "有额度", free: true },
+      { id: "SenseChat-5", label: "SenseChat-5", tag: "视账号权限", free: false },
+    ],
+    tip: 'Key 在 <a href="https://platform.sensenova.cn" target="_blank" rel="noopener">商汤日日新</a> 创建。',
+    system: THINK_SYSTEM,
+    vision: false,
+    imageGen: false,
+    videoGen: false,
+  },
   openai: {
     name: "OpenAI / ChatGPT",
-    navDesc: "GPT-4o 系列",
+    navDesc: "GPT 系列",
     base: "https://api.openai.com/v1",
     model: "gpt-4o-mini",
     models: [
-      { id: "gpt-4o-mini", label: "GPT-4o mini" },
-      { id: "gpt-4o", label: "GPT-4o" },
-      { id: "gpt-4.1", label: "GPT-4.1" },
-      { id: "gpt-4.1-mini", label: "GPT-4.1 mini" },
-      { id: "o3-mini", label: "o3-mini" },
+      { id: "gpt-4o-mini", label: "GPT-4o mini", tag: "付费", free: false },
+      { id: "gpt-4o", label: "GPT-4o", tag: "付费·识图", free: false },
+      { id: "gpt-4.1", label: "GPT-4.1", tag: "付费", free: false },
+      { id: "gpt-4.1-mini", label: "GPT-4.1 mini", tag: "付费", free: false },
+      { id: "o3-mini", label: "o3-mini", tag: "付费·推理", free: false },
+      { id: "gpt-3.5-turbo", label: "GPT-3.5 Turbo", tag: "不建议·旧", deprecated: true },
     ],
-    tip: "官方 OpenAI Key，或兼容中转的 Base 需自行改代码。",
+    tip: "官方 OpenAI Key（付费）。国内需可访问的网络或兼容中转。",
     system: THINK_SYSTEM,
     vision: true,
     imageGen: true,
@@ -964,10 +1095,10 @@ const AI_PROVIDERS = {
     base: "https://api.x.ai/v1",
     model: "grok-3-mini",
     models: [
-      { id: "grok-3-mini", label: "Grok 3 Mini" },
-      { id: "grok-3", label: "Grok 3" },
-      { id: "grok-2", label: "Grok 2" },
-      { id: "grok-2-vision-1212", label: "Grok 2 Vision" },
+      { id: "grok-3-mini", label: "Grok 3 Mini", tag: "付费", free: false },
+      { id: "grok-3", label: "Grok 3", tag: "付费", free: false },
+      { id: "grok-2-vision-1212", label: "Grok 2 Vision", tag: "识图", free: false },
+      { id: "grok-2", label: "Grok 2", tag: "不建议·旧", deprecated: true },
     ],
     tip: 'Key 在 <a href="https://console.x.ai" target="_blank" rel="noopener">xAI Console</a> 创建。',
     system: THINK_SYSTEM,
@@ -979,221 +1110,22 @@ const AI_PROVIDERS = {
     name: "Claude (Anthropic)",
     navDesc: "Anthropic Claude",
     base: "https://api.anthropic.com/v1",
-    model: "claude-3-5-haiku-latest",
+    model: "claude-sonnet-4-20250514",
     models: [
-      { id: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku" },
-      { id: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet" },
-      { id: "claude-sonnet-4-20250514", label: "Claude Sonnet 4" },
-      { id: "claude-3-opus-latest", label: "Claude 3 Opus" },
+      { id: "claude-sonnet-4-20250514", label: "Claude Sonnet 4", tag: "付费·写代码强", free: false },
+      { id: "claude-3-5-sonnet-latest", label: "Claude 3.5 Sonnet", tag: "付费", free: false },
+      { id: "claude-3-5-haiku-latest", label: "Claude 3.5 Haiku", tag: "付费·快", free: false },
+      { id: "claude-3-opus-latest", label: "Claude 3 Opus", tag: "不建议·旧", deprecated: true },
     ],
-    tip: 'Key 在 <a href="https://console.anthropic.com" target="_blank" rel="noopener">Anthropic Console</a>。注：官方接口非完全 OpenAI 兼容，建议用兼容中转。',
+    tip: '官方 Claude 接口与 OpenAI 不完全兼容，建议用兼容中转 Base。Key：<a href="https://console.anthropic.com" target="_blank" rel="noopener">Anthropic</a>。',
     system: THINK_SYSTEM,
     vision: true,
     imageGen: false,
     videoGen: false,
-    // 用 OpenAI 兼容代理时改 base；直连需不同协议
     openaiCompat: true,
   },
-  gemini: {
-    name: "Google Gemini",
-    navDesc: "谷歌 Gemini",
-    base: "https://generativelanguage.googleapis.com/v1beta/openai",
-    model: "gemini-2.5-flash",
-    models: [
-      { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash" },
-      { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash-Lite" },
-      { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-      { id: "gemini-2.0-flash", label: "Gemini 2.0 Flash" },
-      { id: "gemini-2.0-flash-lite", label: "Gemini 2.0 Flash Lite" },
-      { id: "gemini-3.8-flash", label: "Gemini 3.8 Flash" },
-      { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview" },
-    ],
-    tip: 'Key 在 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">Google AI Studio</a> 创建。旧 preview 模型名已下线，请选列表中的稳定 ID。',
-    system: THINK_SYSTEM,
-    vision: true,
-    imageGen: false,
-    videoGen: false,
-  },
-  deepseek: {
-    name: "DeepSeek",
-    navDesc: "深度求索",
-    base: "https://api.deepseek.com",
-    model: "deepseek-chat",
-    models: [
-      { id: "deepseek-chat", label: "DeepSeek Chat (V3)" },
-      { id: "deepseek-reasoner", label: "DeepSeek Reasoner (R1)" },
-    ],
-    tip: 'Key 在 <a href="https://platform.deepseek.com" target="_blank" rel="noopener">DeepSeek 开放平台</a> 创建。',
-    system: THINK_SYSTEM,
-    vision: false,
-    imageGen: false,
-    videoGen: false,
-  },
-  qwen: {
-    name: "通义千问",
-    navDesc: "阿里百炼",
-    base: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    model: "qwen-plus",
-    models: [
-      { id: "qwen-plus", label: "Qwen Plus" },
-      { id: "qwen-turbo", label: "Qwen Turbo" },
-      { id: "qwen-max", label: "Qwen Max" },
-      { id: "qwen-long", label: "Qwen Long" },
-    ],
-    tip: 'Key 在 <a href="https://dashscope.console.aliyun.com" target="_blank" rel="noopener">阿里云百炼</a> 创建。',
-    system: THINK_SYSTEM,
-    vision: true,
-    imageGen: true,
-    imageModel: "wanx-v1",
-    videoGen: false,
-  },
-  zhipu: {
-    name: "智谱 GLM",
-    navDesc: "智谱清言",
-    base: "https://open.bigmodel.cn/api/paas/v4",
-    model: "glm-4-flash",
-    models: [
-      { id: "glm-4-flash", label: "GLM-4 Flash" },
-      { id: "glm-4-air", label: "GLM-4 Air" },
-      { id: "glm-4-plus", label: "GLM-4 Plus" },
-      { id: "glm-4-long", label: "GLM-4 Long" },
-    ],
-    tip: 'Key 在 <a href="https://open.bigmodel.cn" target="_blank" rel="noopener">智谱开放平台</a> 创建。',
-    system: THINK_SYSTEM,
-    vision: true,
-    imageGen: true,
-    imageModel: "cogview-3-flash",
-    imageSize: "1024x1024",
-    videoGen: false,
-  },
-  kimi: {
-    name: "Kimi",
-    navDesc: "月之暗面",
-    base: "https://api.moonshot.cn/v1",
-    model: "moonshot-v1-8k",
-    models: [
-      { id: "moonshot-v1-8k", label: "Moonshot v1 8K" },
-      { id: "moonshot-v1-32k", label: "Moonshot v1 32K" },
-      { id: "moonshot-v1-128k", label: "Moonshot v1 128K" },
-      { id: "kimi-latest", label: "Kimi Latest" },
-    ],
-    tip: 'Key 在 <a href="https://platform.moonshot.cn" target="_blank" rel="noopener">月之暗面控制台</a> 创建。',
-    system: THINK_SYSTEM,
-    vision: true,
-    imageGen: false,
-    videoGen: false,
-  },
-  sensenova: {
-    name: "商汤日日新",
-    navDesc: "SenseNova",
-    base: "https://token.sensenova.cn/v1",
-    model: "sensenova-6.8-flash-lite",
-    models: [
-      { id: "sensenova-6.8-flash-lite", label: "SenseNova 6.8 Flash Lite" },
-      { id: "SenseChat-5", label: "SenseChat-5" },
-    ],
-    tip: 'Key 在 <a href="https://platform.sensenova.cn" target="_blank" rel="noopener">商汤控制台</a> 创建。',
-    system: THINK_SYSTEM,
-    vision: true,
-    imageGen: false,
-    videoGen: false,
-  },
-  doubao: {
-    name: "豆包 (字节)",
-    navDesc: "火山方舟",
-    base: "https://ark.cn-beijing.volces.com/api/v3",
-    model: "doubao-1-5-lite-32k",
-    models: [
-      { id: "doubao-1-5-lite-32k", label: "Doubao 1.5 Lite" },
-      { id: "doubao-1-5-pro-32k", label: "Doubao 1.5 Pro" },
-      { id: "doubao-seed-1-6-250615", label: "Doubao Seed 1.6" },
-    ],
-    tip: 'Key 在 <a href="https://console.volcengine.com/ark" target="_blank" rel="noopener">火山方舟</a> 创建，模型 ID 以控制台接入点为准。',
-    system: THINK_SYSTEM,
-    vision: true,
-    imageGen: false,
-    videoGen: false,
-  },
-  baichuan: {
-    name: "百川",
-    navDesc: "Baichuan",
-    base: "https://api.baichuan-ai.com/v1",
-    model: "Baichuan4-Turbo",
-    models: [
-      { id: "Baichuan4-Turbo", label: "Baichuan4 Turbo" },
-      { id: "Baichuan4-Air", label: "Baichuan4 Air" },
-    ],
-    tip: 'Key 在 <a href="https://platform.baichuan-ai.com" target="_blank" rel="noopener">百川智能</a> 创建。',
-    system: THINK_SYSTEM,
-    vision: false,
-    imageGen: false,
-    videoGen: false,
-  },
-  yi: {
-    name: "零一万物 Yi",
-    navDesc: "01.AI",
-    base: "https://api.lingyiwanwu.com/v1",
-    model: "yi-lightning",
-    models: [
-      { id: "yi-lightning", label: "Yi Lightning" },
-      { id: "yi-large", label: "Yi Large" },
-      { id: "yi-spark", label: "Yi Spark" },
-    ],
-    tip: 'Key 在 <a href="https://platform.lingyiwanwu.com" target="_blank" rel="noopener">零一万物</a> 创建。',
-    system: THINK_SYSTEM,
-    vision: false,
-    imageGen: false,
-    videoGen: false,
-  },
-  stepfun: {
-    name: "阶跃星辰",
-    navDesc: "StepFun",
-    base: "https://api.stepfun.com/v1",
-    model: "step-2-mini",
-    models: [
-      { id: "step-2-mini", label: "Step 2 Mini" },
-      { id: "step-1-8k", label: "Step 1 8K" },
-      { id: "step-1v-8k", label: "Step 1V 8K（识图）" },
-    ],
-    tip: 'Key 在 <a href="https://platform.stepfun.com" target="_blank" rel="noopener">阶跃星辰</a> 创建。',
-    system: THINK_SYSTEM,
-    vision: true,
-    imageGen: false,
-    videoGen: false,
-  },
-  minimax: {
-    name: "MiniMax",
-    navDesc: "稀宇科技",
-    base: "https://api.minimax.chat/v1",
-    model: "MiniMax-Text-01",
-    models: [
-      { id: "MiniMax-Text-01", label: "MiniMax Text 01" },
-      { id: "abab6.5s-chat", label: "ABAB 6.5s" },
-    ],
-    tip: 'Key 在 <a href="https://platform.minimaxi.com" target="_blank" rel="noopener">MiniMax 开放平台</a> 创建。',
-    system: THINK_SYSTEM,
-    vision: false,
-    imageGen: false,
-    videoGen: false,
-  },
-  siliconflow: {
-    name: "硅基流动",
-    navDesc: "开源模型聚合",
-    base: "https://api.siliconflow.cn/v1",
-    model: "deepseek-ai/DeepSeek-V3",
-    models: [
-      { id: "deepseek-ai/DeepSeek-V3", label: "DeepSeek V3" },
-      { id: "Qwen/Qwen2.5-72B-Instruct", label: "Qwen2.5 72B" },
-      { id: "meta-llama/Meta-Llama-3.1-70B-Instruct", label: "Llama 3.1 70B" },
-    ],
-    tip: 'Key 在 <a href="https://cloud.siliconflow.cn" target="_blank" rel="noopener">硅基流动</a> 创建，模型名以控制台为准。',
-    system: THINK_SYSTEM,
-    vision: false,
-    imageGen: true,
-    imageModel: "black-forest-labs/FLUX.1-schnell",
-    videoGen: false,
-  },
 };
+
 
 const CHAT_MODEL_KEY = "ai_chat_model_v1"; // providerId -> modelId
 
@@ -1295,14 +1227,21 @@ function getSelectedModelId() {
   const p = getProvider();
   const map = loadModelMap();
   let saved = map[pid];
-  // Gemini 旧 preview / 1.5 已下线
-  if (pid === "gemini" && saved && !(p.models || []).some((m) => m.id === saved)) {
-    saved = "gemini-2.5-flash";
-    map.gemini = saved;
-    saveModelMap(map);
+  // Gemini：旧 ID 或本地仍记着 2.5 默认时，新用户改为 3.8 Flash
+  if (pid === "gemini") {
+    const allowed = (p.models || []).map((m) => m.id);
+    if (!saved || !allowed.includes(saved) || /^gemini-2\.5-/.test(saved)) {
+      // 不强制覆盖用户明确选的 2.5（老用户可能可用）；仅在 ID 无效时迁移
+      if (!saved || !allowed.includes(saved)) {
+        saved = "gemini-3.8-flash";
+        map.gemini = saved;
+        saveModelMap(map);
+      }
+    }
   }
-  if (saved && (p.models || []).some((m) => m.id === saved)) return saved;
-  return p.model;
+  if (saved && (p.models || []).some((m) => m.id === saved && !m.deprecated)) return saved;
+  const prefer = (p.models || []).find((m) => !m.deprecated) || (p.models || [])[0];
+  return (prefer && prefer.id) || p.model;
 }
 
 function setSelectedModelId(modelId) {
@@ -1379,19 +1318,35 @@ function openModelPicker() {
   (p.models || [{ id: p.model, label: p.model }]).forEach((m) => {
     const row = document.createElement("button");
     row.type = "button";
-    row.className = "model-picker-item" + (m.id === mid ? " active" : "");
+    const dep = !!m.deprecated;
+    row.className =
+      "model-picker-item" +
+      (m.id === mid ? " active" : "") +
+      (dep ? " deprecated" : "");
+    const tag = m.tag
+      ? '<span class="model-tag' +
+        (m.free ? " free" : dep ? " dead" : " paid") +
+        '">' +
+        escapeHtml(m.tag) +
+        "</span>"
+      : "";
     row.innerHTML =
-      "<strong>" +
+      "<div class=\"model-picker-top\"><strong>" +
       escapeHtml(m.label) +
-      '</strong><span class="model-id">' +
+      "</strong>" +
+      tag +
+      '</div><span class="model-id">' +
       escapeHtml(m.id) +
       (m.video ? " · 视频" : "") +
       "</span>";
     row.addEventListener("click", () => {
+      if (dep) {
+        void uiAlert("该模型已停用或不建议使用，请选择其它模型。");
+        return;
+      }
       setSelectedModelId(m.id);
       applyProviderUI();
       modelPickerModal.hidden = true;
-      // 选中视频专用模型时提示用生视频按钮
       if (m.video) {
         void uiAlert("已选择视频模型。请点底部「生视频」按钮生成，不要用普通发送。");
       }
@@ -1520,7 +1475,7 @@ function openChatModal() {
   if (!chatHistory.length) showEmptyState();
   chatModal.hidden = false;
   document.body.style.overflow = "hidden";
-  chatInput.focus();
+  // 手机不默认弹键盘；用户点输入框再弹
 }
 
 function closeChatModal() {
@@ -2033,6 +1988,10 @@ function renderAssistantBubble(el, fullText, reasoningExtra) {
 }
 
 function friendlyError(raw) {
+  if (/no longer available to new users|update your code to use models\/gemini-3/i.test(String(msg || ""))) {
+    return "该 Gemini 模型不对新用户开放。请在模型列表中改选「Gemini 3.8 Flash」或 3.x 系列后重试。";
+  }
+
   const tip = String(raw || "");
   if (/tpm|rpm|rate.?limit|exceeds.*limit|429/i.test(tip)) {
     return "请求过于频繁或额度不足（限流）。请等待 30～60 秒后再试，或换一个模型 / 明天再用。";
