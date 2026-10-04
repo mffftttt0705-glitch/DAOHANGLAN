@@ -3269,29 +3269,44 @@ async function pushFilesToGithub(files) {
   const repo = parts[1];
   const branch = cfg.branch || "main";
   const prefix = (cfg.pathPrefix || "").replace(/^\/+|\/+$/g, "");
-  let ok = 0;
-  let fail = 0;
-  for (const f of files) {
-    let path = f.path.replace(/^\/+/, "");
+  const batch = (files || []).map((f) => {
+    let path = String(f.path || "").replace(/^\/+/, "");
     if (prefix) path = prefix + "/" + path;
-    try {
-      await githubApi({
-        action: "put",
-        token: cfg.token,
-        owner,
-        repo,
-        branch,
-        path,
-        content: f.content,
-        message: "AI update: " + path,
-      });
-      ok++;
-    } catch (e) {
-      console.error(e);
-      fail++;
-    }
+    return { path, content: f.content || "" };
+  }).filter((f) => f.path);
+
+  if (!batch.length) {
+    void uiAlert("没有可推送的文件");
+    return;
   }
-  void uiAlert("GitHub 推送完成：成功 " + ok + "，失败 " + fail);
+
+  try {
+    // 一次 commit 推送全部文件，只触发 1 次 Cloudflare Pages 构建
+    const result = await githubApi({
+      action: "batch",
+      token: cfg.token,
+      owner,
+      repo,
+      branch,
+      message:
+        "AI update: " +
+        batch
+          .map((f) => f.path)
+          .slice(0, 4)
+          .join(", ") +
+        (batch.length > 4 ? " +" + (batch.length - 4) : ""),
+      files: batch,
+    });
+    void uiAlert(
+      "已推送 " +
+        batch.length +
+        " 个文件到 GitHub（1 次提交）。\nCloudflare 将自动部署，请到 Deployments 查看最新一条。"
+    );
+    console.log("github batch", result);
+  } catch (e) {
+    console.error(e);
+    void uiAlert("推送失败：" + (e.message || e));
+  }
 }
 
 function openGithubModal() {
